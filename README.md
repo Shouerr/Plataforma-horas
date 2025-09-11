@@ -1,12 +1,39 @@
-# React + Vite
+# Plataforma de Gestión de Citas y Control de Horas
+Este proyecto es parte de mi Práctica Profesional Supervisada (PES) en la Universidad Latina de Costa Rica.
+La plataforma permitirá gestionar citas y controlar las horas de servicio estudiantil de manera automatizada, confiable y eficiente, reemplazando el proceso manual en Excel.
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+---
 
-Currently, two official plugins are available:
+# 🚀 Tecnologías utilizadas
+React + Vite (frontend)
+Firebase (Firestore, Authentication, Hosting)
+Visual Studio Code (entorno de desarrollo)
+Lovable.dev (prototipado de UI/UX)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## Expanding the ESLint configuration
+# 📦 Instalación y ejecución
+git clone git@github.com:Shouerr/Plataforma-horas.git
+cd Plataforma-horas
+npm install
+npm run dev
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+---
+
+# 🌐 Demo en línea
+Próximamente disponible en Firebase Hosting.
+
+---
+
+# 📑 Objetivos del proyecto
+-> Gestionar citas y asistencia de estudiantes.
+-> Registrar horas de servicio estudiantil en tiempo real.
+-> Diferenciar accesos y funciones entre estudiantes y administradores.
+-> Generar un sistema confiable y sin errores que reemplace el proceso manual en Excel.
+
+---
+
+# 👨‍💻 Autor
+Andrés Steinshouer Ramírez
+Estudiante de Ingeniería en Sistemas Computacionales
+Universidad Latina de Costa Rica
