@@ -7,18 +7,35 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Dependencies
+node_modules/
 
-# Editor directories and files
+# Build outputs
+dist/
+dist-ssr/
+.vite/
+.cache/
+
+# Editor configs
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Firebase
+.firebase/
+firestore-debug.log
+ui-debug.log
+
+# Functions (si luego usas Cloud Functions)
+functions/node_modules/
