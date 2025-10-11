@@ -73,3 +73,20 @@ h1{ margin:0 0 4px; font-size:28px; font-weight:800; }
 .overlay, .backdrop {
   pointer-events: none !important;
 }
+
+/* --- Mensajes con fondo y borde (UI más clara) --- */
+.msg.info {
+  background: rgba(59,130,246,.12);
+  border: 1px solid #3b82f6;
+  color: #cfe2ff;
+  padding: .6rem .8rem;
+  border-radius: .5rem;
+}
+
+.msg.success {
+  background: rgba(16,185,129,.12);
+  border: 1px solid #10b981;
+  color: #d1fae5;
+  padding: .6rem .8rem;
+  border-radius: .5rem;
+}

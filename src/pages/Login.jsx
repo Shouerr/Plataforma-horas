@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-} from "firebase/auth";
+import {signInWithEmailAndPassword, createUserWithEmailAndPassword} from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "../app/firebase";
 import { useAuth } from "../context/AuthContext";
@@ -89,6 +86,9 @@ export default function Login() {
     }
   };
 
+  // desactivar formulario si ya hay sesión o está cargando
+  const formDisabled = loading || !!user;
+
   return (
     <div className="auth-wrap">
       <div className="card" style={{ position: "relative", zIndex: 10 }}>
@@ -111,6 +111,7 @@ export default function Login() {
             onClick={() => setMode("login")}
             role="tab"
             aria-selected={mode === "login"}
+            disabled={formDisabled}
           >
             Ya tengo cuenta
           </button>
@@ -119,10 +120,23 @@ export default function Login() {
             onClick={() => setMode("register")}
             role="tab"
             aria-selected={mode === "register"}
+            disabled={formDisabled}
           >
             Registrarme
           </button>
         </div>
+
+        {/* Mensaje de estado/rol */}
+        {user && !role && (
+          <div className="msg info" style={{ marginTop: 8 }}>
+            Validando tu rol… 🔎
+          </div>
+        )}
+        {user && role && (
+          <div className="msg success" style={{ marginTop: 8 }}>
+            Detectamos tu rol: <b>{role === "admin" ? "Administrador" : "Estudiante"}</b>. Redirigiendo…
+          </div>
+        )}
 
         <form onSubmit={mode === "login" ? handleLogin : handleRegister}>
           <label className="lbl">Correo institucional</label>
@@ -133,6 +147,7 @@ export default function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            disabled={formDisabled}
           />
 
           <label className="lbl">Contraseña</label>
@@ -143,12 +158,13 @@ export default function Login() {
             value={pass}
             onChange={(e) => setPass(e.target.value)}
             required
+            disabled={formDisabled}
           />
 
           {msg?.text && <div className={`msg ${msg.type}`}>{msg.text}</div>}
 
           <div className="row">
-            <button className="btn" type="submit" disabled={loading}>
+            <button className="btn" type="submit" disabled={formDisabled}>
               {loading
                 ? "Procesando…"
                 : mode === "login"
@@ -163,6 +179,7 @@ export default function Login() {
                 setPass("");
                 setMsg({ type: "", text: "" });
               }}
+              disabled={formDisabled}
             >
               Limpiar
             </button>
