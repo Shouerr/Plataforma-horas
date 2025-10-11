@@ -1,24 +1,39 @@
 rules_version = '2';
+
 service cloud.firestore {
+  
   match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+    function isAdmin() {
+      return signedIn() &&
+      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
 
     match /users/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow read: if isSelf(uid) || isAdmin();
+      allow create: if isSelf(uid) && request.resource.data.role == "estudiante";
+      allow update: if (isSelf(uid) && !("role" in request.resource.data.diff().changedKeys())) || isAdmin();
+      allow delete: if isSelf(uid) || isAdmin();
     }
 
     match /eventos/{id} {
-      allow read: if true;
-      allow write: if request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     match /citas/{id} {
-      allow read, create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read, create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
 
-    match /asistencia/{id} { allow read: if request.auth != null; allow create: if false; }
-    match /qrSessions/{id} { allow read, write: if false; }
+    match /asistencia/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    match /qrSessions/{id} {
+      allow read, write: if false;
+    }
   }
 }
