@@ -1,12 +1,18 @@
-import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function NavBar() {
-  const s = { marginRight: 12 };
+  const { user, logout } = useAuth();
+
   return (
-    <nav style={{ padding: 12, borderBottom: "1px solid #ddd" }}>
-      <Link to="/login" style={s}>Login</Link>
-      <Link to="/estudiante" style={s}>Estudiante</Link>
-      <Link to="/admin" style={s}>Admin</Link>
+    <nav>
+      <a href="/login">Login</a>
+      <a href="/estudiante">Estudiante</a>
+      <a href="/admin">Admin</a>
+      {user && (
+        <button onClick={logout} style={{ marginLeft: "1rem" }}>
+          Cerrar sesión
+        </button>
+      )}
     </nav>
   );
 }
