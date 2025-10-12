@@ -5,6 +5,7 @@ import Login from "../pages/Login";
 import DashboardEstudiante from "../pages/DashboardEstudiante";
 import DashboardAdmin from "../pages/DashboardAdmin";
 import NotFound from "../pages/NotFound";
+import EventoDetalle from "../pages/EventoDetalle"; 
 
 // Ruta protegida
 import ProtectedRoute from "./ProtectedRoute";
@@ -34,6 +35,16 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
+  // 👇 nueva ruta: detalle de evento (visible solo para estudiantes)
+  {
+    path: "/estudiante/evento/:id",
+    element: (
+      <ProtectedRoute role="estudiante">
+        {WithLayout(<EventoDetalle />)}
+      </ProtectedRoute>
+    ),
+  },
+
   {
     path: "/admin",
     element: (
@@ -42,6 +53,7 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
+
   { path: "*", element: WithLayout(<NotFound />) },
 ]);
 
