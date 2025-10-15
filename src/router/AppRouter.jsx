@@ -6,6 +6,7 @@ import DashboardEstudiante from "../pages/DashboardEstudiante";
 import DashboardAdmin from "../pages/DashboardAdmin";
 import NotFound from "../pages/NotFound";
 import EventoDetalle from "../pages/EventoDetalle"; 
+import MisCitas from "../pages/MisCitas"; 
 
 // Ruta protegida
 import ProtectedRoute from "./ProtectedRoute";
@@ -53,6 +54,15 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
+
+  {
+  path: "/estudiante/mis-citas",
+  element: (
+    <ProtectedRoute role="estudiante">
+      {WithLayout(<MisCitas />)}
+    </ProtectedRoute>
+  ),
+},
 
   { path: "*", element: WithLayout(<NotFound />) },
 ]);

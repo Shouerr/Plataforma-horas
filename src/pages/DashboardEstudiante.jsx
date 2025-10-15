@@ -24,7 +24,19 @@ export default function DashboardEstudiante() {
 
   return (
     <div style={{ padding: 20 }}>
-      <h2 style={{ marginBottom: 10 }}>Eventos disponibles</h2>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 10,
+        }}
+      >
+        <h2>Eventos disponibles</h2>
+        <button className="btn ghost" onClick={() => nav("/estudiante/mis-citas")}>
+          Ver mis citas
+        </button>
+      </div>
 
       {eventos.length === 0 ? (
         <p style={{ opacity: 0.7 }}>No hay eventos activos.</p>
