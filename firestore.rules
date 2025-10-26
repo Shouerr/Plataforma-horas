@@ -1,39 +1,105 @@
 rules_version = '2';
-
 service cloud.firestore {
-  
   match /databases/{database}/documents {
+
     function signedIn() { return request.auth != null; }
     function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
-    function isAdmin() {
-      return signedIn() &&
-      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    function roleOf(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.role;
+    }
+    function isAdmin() { return signedIn() && roleOf(request.auth.uid) == "admin"; }
+
+    // Helper para tomar el userId de la cita (acepta userId o usuarioId)
+    function citaUserId(data) {
+      return (data.userId != null) ? data.userId : data.usuarioId;
     }
 
+    // ---------------- Users ----------------
     match /users/{uid} {
       allow read: if isSelf(uid) || isAdmin();
-      allow create: if isSelf(uid) && request.resource.data.role == "estudiante";
-      allow update: if (isSelf(uid) && !("role" in request.resource.data.diff().changedKeys())) || isAdmin();
+      // Permite crear el propio doc (sin forzar "estudiante", así puedes crear admin también)
+      allow create: if isSelf(uid);
+      // El usuario puede actualizar su doc excepto el role; admin puede todo
+      allow update: if (isSelf(uid) && !("role" in request.resource.data.diff(resource.data).changedKeys()))
+                    || isAdmin();
       allow delete: if isSelf(uid) || isAdmin();
     }
 
+    // ---------------- Eventos ----------------
     match /eventos/{id} {
-      allow read: if signedIn();
+      allow read: if true;
+
+      // Admin puede todo
       allow create, update, delete: if isAdmin();
+
+      // EXTRA: permitir a usuarios autenticados actualizar SOLO el contador "reservados"
+      // en +/-1 y sin tocar ningún otro campo crítico.
+      allow update: if signedIn() && (() => {
+        let d = request.resource.data.diff(resource.data);
+        // Solo puede cambiar 'reservados'
+        return d.changedKeys().hasOnly(['reservados'])
+          // Campos críticos deben permanecer iguales
+          && request.resource.data.cupo == resource.data.cupo
+          && request.resource.data.estado == resource.data.estado
+          && request.resource.data.fechaInicio == resource.data.fechaInicio
+          && request.resource.data.fechaFin == resource.data.fechaFin
+          // Límites y paso unitario
+          && request.resource.data.reservados >= 0
+          && request.resource.data.reservados <= resource.data.cupo
+          && (
+               request.resource.data.reservados == resource.data.reservados + 1 ||
+               request.resource.data.reservados == resource.data.reservados - 1
+             );
+      });
     }
 
-    match /citas/{id} {
-      allow read, create: if signedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if signedIn() && resource.data.userId == request.auth.uid;
+    // ---------------- Citas ----------------
+    match /citas/{citaId} {
+      allow read: if signedIn();
+
+      // Crear cita: dueño es el auth.uid, estado inicial "pendiente",
+      // ID = eventoId_uid, evento activo con cupos y dentro de tiempo.
+      allow create: if signedIn()
+        && citaUserId(request.resource.data) == request.auth.uid
+        && request.resource.data.estado == "pendiente"
+        && request.resource.data.eventoId is string
+        && request.resource.data.creadoEn is timestamp
+        && citaId == (request.resource.data.eventoId + "_" + request.auth.uid)
+        && (() => {
+             let evPath = "/databases/$(database)/documents/eventos/" + request.resource.data.eventoId;
+             let ev = get(evPath);
+             return ev.exists()
+               && ev.data.estado == "activo"
+               && (ev.data.reservados ?? 0) < ev.data.cupo
+               && request.time < ev.data.fechaFin;
+           })();
+
+      // Actualizar: el dueño puede cancelar; admin puede confirmar/cambiar estado.
+      allow update: if signedIn()
+        && citaUserId(request.resource.data) == request.auth.uid
+        && citaUserId(resource.data) == request.auth.uid
+        && (
+             // estudiante: pendiente -> cancelada
+             (resource.data.estado == "pendiente" && request.resource.data.estado == "cancelada")
+             ||
+             // admin: puede establecer cualquier estado permitido
+             (isAdmin() && request.resource.data.estado in ["pendiente","confirmada","cancelada"])
+           );
+
+      // Borrar: dueño si sigue pendiente (opcional)
+      allow delete: if signedIn()
+        && citaUserId(resource.data) == request.auth.uid
+        && resource.data.estado == "pendiente";
     }
 
+    // ---------------- Asistencia / QR ----------------
     match /asistencia/{id} {
       allow read: if signedIn();
-      allow create, update, delete: if false;
+      allow create, update, delete: if false; // de momento cerrado
     }
 
     match /qrSessions/{id} {
-      allow read, write: if false;
+      allow read, write: if false; // de momento cerrado
     }
   }
 }
