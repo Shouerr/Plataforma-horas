@@ -1,20 +1,22 @@
 import { createBrowserRouter } from "react-router-dom";
 
-// Páginas principales
+// Páginas (estudiante)
 import Login from "../pages/Login";
 import DashboardEstudiante from "../pages/DashboardEstudiante";
+import EventoDetalle from "../pages/EventoDetalle";
+import MisCitas from "../pages/MisCitas";
+
+// Páginas (admin)
 import DashboardAdmin from "../pages/DashboardAdmin";
+import EventosAdmin from "../pages/EventosAdmin";
+import CitasAdmin from "../pages/CitasAdmin"; // <-- crea este archivo si aún no
+
+// Comunes
 import NotFound from "../pages/NotFound";
-import EventoDetalle from "../pages/EventoDetalle"; 
-import MisCitas from "../pages/MisCitas"; 
-
-// Ruta protegida
 import ProtectedRoute from "./ProtectedRoute";
-
-// Componentes comunes
 import NavBar from "../components/NavBar";
 
-// Layout con Navbar
+// Layout simple con NavBar
 function WithLayout(element) {
   return (
     <>
@@ -25,9 +27,11 @@ function WithLayout(element) {
 }
 
 const router = createBrowserRouter([
+  // Público
   { path: "/", element: <Login /> },
   { path: "/login", element: <Login /> },
 
+  // ===== Estudiante =====
   {
     path: "/estudiante",
     element: (
@@ -36,7 +40,6 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
-  // 👇 nueva ruta: detalle de evento (visible solo para estudiantes)
   {
     path: "/estudiante/evento/:id",
     element: (
@@ -45,7 +48,16 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
+  {
+    path: "/estudiante/mis-citas",
+    element: (
+      <ProtectedRoute role="estudiante">
+        {WithLayout(<MisCitas />)}
+      </ProtectedRoute>
+    ),
+  },
 
+  // ===== Admin =====
   {
     path: "/admin",
     element: (
@@ -54,16 +66,25 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
-
   {
-  path: "/estudiante/mis-citas",
-  element: (
-    <ProtectedRoute role="estudiante">
-      {WithLayout(<MisCitas />)}
-    </ProtectedRoute>
-  ),
-},
+    path: "/admin/eventos",
+    element: (
+      <ProtectedRoute role="admin">
+        {WithLayout(<EventosAdmin />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // gestión de citas por evento
+    path: "/admin/eventos/:eventoId/citas",
+    element: (
+      <ProtectedRoute role="admin">
+        {WithLayout(<CitasAdmin />)}
+      </ProtectedRoute>
+    ),
+  },
 
+  // 404
   { path: "*", element: WithLayout(<NotFound />) },
 ]);
 

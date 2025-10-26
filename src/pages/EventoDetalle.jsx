@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { watchEventoById } from "../services/eventosService";
 import { useAuth } from "../context/AuthContext";
 import { crearCita, getCitaByEventAndUser, countCitasActivas } from "../services/citasService";
+import toast from 'react-hot-toast';
 
 export default function EventoDetalle() {
   const { id } = useParams();
@@ -15,7 +16,7 @@ export default function EventoDetalle() {
   const [yaInscrito, setYaInscrito] = useState(false);
   const [cuposInfo, setCuposInfo] = useState({ ocupados: 0, cupo: 0 });
 
-  // cargar evento
+  // Cargar evento
   useEffect(() => {
     if (!id) return;
     const unsub = watchEventoById(id, (data) => {
@@ -25,7 +26,7 @@ export default function EventoDetalle() {
     return () => unsub && unsub();
   }, [id]);
 
-  // comprobar inscripción y cupos
+  // Comprobar inscripción y cupos
   useEffect(() => {
     const run = async () => {
       if (!id || !user) return;
@@ -57,7 +58,7 @@ export default function EventoDetalle() {
   }
 
   const activo = ev.estado === "activo";
-const sinCupo = ev?.cupo && cuposInfo.ocupados >= Number(ev.cupo);
+  const sinCupo = ev?.cupo && cuposInfo.ocupados >= Number(ev.cupo);
   const puedeInscribir = activo && !yaInscrito && !sinCupo;
 
   const inscribirme = async () => {
@@ -65,12 +66,12 @@ const sinCupo = ev?.cupo && cuposInfo.ocupados >= Number(ev.cupo);
       if (!user?.uid) return alert("Inicia sesión para inscribirte.");
       setBusy(true);
       await crearCita({ evento: ev, user });
-      alert("Inscripción registrada (pendiente).");
+      toast("Inscripción registrada correctamente ✅");
       setYaInscrito(true);
       const ocup = await countCitasActivas(ev.id);
       setCuposInfo({ ocupados: ocup, cupo: Number(ev.cupo || 0) });
     } catch (e) {
-      alert(e?.message || "No se pudo inscribir.");
+      toast(e?.message || "No se pudo inscribir.");
     } finally {
       setBusy(false);
     }

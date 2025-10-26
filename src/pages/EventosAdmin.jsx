@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { watchEventos, crearEvento, actualizarEvento, eliminarEvento } from "../services/eventosService";
 import EventoForm from "../components/EventoForm";
+import { Link } from "react-router-dom";              // ⬅️ nuevo
+import toast from "react-hot-toast";
 
 export default function EventosAdmin() {
   const { user } = useAuth();
@@ -32,10 +34,8 @@ export default function EventosAdmin() {
     if (!confirm("¿Eliminar evento?")) return;
     try {
       setBusyId(id);
-      console.log("[UI] intentando eliminar", id);
       await eliminarEvento(id);
-      console.log("[UI] eliminado OK", id);
-      // UI optimista por si el onSnapshot tarda
+      toast("Evento eliminado ✅");
       setItems(prev => Array.isArray(prev) ? prev.filter(e => e.id !== id) : []);
     } catch (err) {
       console.error("Eliminar evento error:", err);
@@ -82,7 +82,12 @@ export default function EventosAdmin() {
                 <td>{ev.cupo}</td>
                 <td>{ev.estado}</td>
                 <td style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                  <button type="button" className="btn ghost" onClick={() => openEdit(ev)}>Editar</button>
+                  <Link className="btn ghost" to={`/admin/eventos/${ev.id}/citas`}>
+                    Ver citas
+                  </Link>
+                  <button type="button" className="btn ghost" onClick={() => openEdit(ev)}>
+                    Editar
+                  </button>
                   <button
                     type="button"
                     className="btn"
