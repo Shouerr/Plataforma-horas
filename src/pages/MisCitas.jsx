@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate, Link } from "react-router-dom";
 import { watchCitasByUser, cancelarCita } from "../services/citasService";
+import toast from 'react-hot-toast';
 
 export default function MisCitas() {
   const { user } = useAuth();
@@ -20,16 +21,28 @@ export default function MisCitas() {
     try {
       setBusy(c.id);
       await cancelarCita(c.id, user.uid);
+      toast("Cita cancelada ✅");
     } catch (e) {
-      alert(e?.message || "No se pudo cancelar.");
+      toast(e?.message || "No se pudo cancelar.");
     } finally {
       setBusy(null);
     }
   };
 
+  if (!user?.uid) {
+    return (
+      <div style={{ padding: 20 }}>
+        <p style={{ opacity: 0.7 }}>Inicia sesión para ver tus citas.</p>
+        <button className="btn ghost" onClick={() => nav("/login")}>Ir a login</button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: 20 }}>
-      <button className="btn ghost" onClick={() => nav(-1)} style={{ marginBottom: 10 }}>← Volver</button>
+      <button className="btn ghost" onClick={() => nav(-1)} style={{ marginBottom: 10 }}>
+        ← Volver
+      </button>
       <h2>Mis Citas</h2>
 
       {citas.length === 0 ? (
@@ -38,21 +51,28 @@ export default function MisCitas() {
         <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 10 }}>
           <thead>
             <tr style={{ textAlign: "left" }}>
-              <th>Evento</th><th>Inicio</th><th>Estado</th><th></th>
+              <th>Evento</th>
+              <th>Inicio</th>
+              <th>Estado</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {citas.map((c) => (
               <tr key={c.id} style={{ borderTop: "1px solid rgba(255,255,255,.08)" }}>
-                <td><Link to={`/estudiante/evento/${c.eventoId}`}>{c.eventoTitulo || c.eventoId}</Link></td>
+                <td>
+                  <Link to={`/estudiante/evento/${c.eventoId}`}>
+                    {c.eventoTitulo || "Evento sin título"}
+                  </Link>
+                </td>
                 <td>{fmt(c.eventoInicio)}</td>
                 <td>{badge(c.estado)}</td>
                 <td style={{ textAlign: "right" }}>
-                  {(c.estado === "pendiente" || c.estado === "confirmada") && (
+                  {(c.estado === "pendiente" || c.estado === "confirmada") ? (
                     <button className="btn" disabled={busy === c.id} onClick={() => cancelar(c)}>
                       {busy === c.id ? "Cancelando…" : "Cancelar"}
                     </button>
-                  )}
+                  ) : null}
                 </td>
               </tr>
             ))}
@@ -68,7 +88,12 @@ function fmt(ts) {
   const d = ts.toDate ? ts.toDate() : new Date(ts);
   return d.toLocaleString();
 }
+
 function badge(estado) {
-  const map = { pendiente: "🟡 Pendiente", confirmada: "🟢 Confirmada", cancelada: "⚪ Cancelada" };
+  const map = {
+    pendiente: "🟡 Pendiente",
+    confirmada: "🟢 Confirmada",
+    cancelada:  "⚪ Cancelada",
+  };
   return map[estado] || estado;
 }
