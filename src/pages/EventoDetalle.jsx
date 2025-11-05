@@ -1,133 +1,159 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { watchEventoById } from "../services/eventosService";
+// src/pages/EventoDetalle.jsx
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
+import { Button } from "../components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Badge } from "../components/ui/badge";
 import { useAuth } from "../context/AuthContext";
-import { crearCita, getCitaByEventAndUser, countCitasActivas } from "../services/citasService";
-import toast from 'react-hot-toast';
+
+import { watchEventoById } from "../services/eventosService";
+import {
+  crearCita,
+  getCitaByEventAndUser,
+} from "../services/citasService";
+
+function fmtRange(ev) {
+  if (!ev) return "—";
+  const d = ev.date ?? ev.fechaInicio ?? null;
+  const s = ev.startTime ?? "";
+  const e = ev.endTime ?? "";
+  if (d?.toDate || d instanceof Date) {
+    const dt = d?.toDate ? d.toDate() : d;
+    const fecha = dt.toLocaleDateString("es-CR", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+    const rango = [s, e].filter(Boolean).join(" - ");
+    return rango ? `${fecha}, ${rango}` : fecha;
+  }
+  return "—";
+}
 
 export default function EventoDetalle() {
   const { id } = useParams();
-  const nav = useNavigate();
   const { user } = useAuth();
 
-  const [ev, setEv] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [yaInscrito, setYaInscrito] = useState(false);
-  const [cuposInfo, setCuposInfo] = useState({ ocupados: 0, cupo: 0 });
+  const [evento, setEvento] = useState(null);
+  const [loadingEvento, setLoadingEvento] = useState(true);
 
-  // Cargar evento
+  const [miCita, setMiCita] = useState(null);
+  const [loadingCita, setLoadingCita] = useState(true);
+
+  const yaInscrito = !!miCita && miCita.estado !== "cancelada";
+
+  // 1) Carga del evento
   useEffect(() => {
     if (!id) return;
     const unsub = watchEventoById(id, (data) => {
-      setEv(data);
-      setLoading(false);
+      setEvento(data);
+      setLoadingEvento(false);
     });
     return () => unsub && unsub();
   }, [id]);
 
-  // Comprobar inscripción y cupos
+  // 2) Carga de mi cita: SOLO si hay user.uid
   useEffect(() => {
-    const run = async () => {
-      if (!id || !user) return;
-      const cita = await getCitaByEventAndUser(id, user.uid);
-      setYaInscrito(!!cita);
-      if (ev) {
-        const ocup = await countCitasActivas(id);
-        setCuposInfo({ ocupados: ocup, cupo: Number(ev.cupo || 0) });
+    let cancel = false;
+    (async () => {
+      setLoadingCita(true);
+      try {
+        if (user?.uid && id) {
+          const cita = await getCitaByEventAndUser(id, user.uid);
+          if (!cancel) setMiCita(cita);
+        } else {
+          if (!cancel) setMiCita(null);
+        }
+      } catch (e) {
+        // Si Auth no estaba listo al primer render, evitamos romper la UI
+        console.warn("[EventoDetalle] getCitaByEventAndUser:", e?.message);
+        if (!cancel) setMiCita(null);
+      } finally {
+        if (!cancel) setLoadingCita(false);
       }
+    })();
+    return () => {
+      cancel = true;
     };
-    run();
-  }, [id, user, ev]);
+  }, [id, user?.uid]);
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: "50vh", display: "grid", placeItems: "center" }}>
-        Cargando evento…
-      </div>
-    );
-  }
+  const disabled =
+    loadingEvento ||
+    loadingCita ||
+    !evento ||
+    yaInscrito ||
+    (evento.maxSpots ?? evento.cupo ?? 0) <= (evento.registeredStudents ?? evento.reservados ?? 0);
 
-  if (!ev) {
-    return (
-      <div style={{ padding: 20 }}>
-        <p style={{ opacity: 0.8 }}>Evento no encontrado.</p>
-        <button className="btn ghost" onClick={() => nav(-1)}>Volver</button>
-      </div>
-    );
-  }
-
-  const activo = ev.estado === "activo";
-  const sinCupo = ev?.cupo && cuposInfo.ocupados >= Number(ev.cupo);
-  const puedeInscribir = activo && !yaInscrito && !sinCupo;
-
-  const inscribirme = async () => {
+  async function handleRegistrar() {
+    if (!user?.uid || !evento?.id) return;
     try {
-      if (!user?.uid) return alert("Inicia sesión para inscribirte.");
-      setBusy(true);
-      await crearCita({ evento: ev, user });
-      toast("Inscripción registrada correctamente ✅");
-      setYaInscrito(true);
-      const ocup = await countCitasActivas(ev.id);
-      setCuposInfo({ ocupados: ocup, cupo: Number(ev.cupo || 0) });
+      await crearCita({ evento, user });
+      // recargar cita luego del registro
+      const c = await getCitaByEventAndUser(evento.id, user.uid);
+      setMiCita(c);
     } catch (e) {
-      toast(e?.message || "No se pudo inscribir.");
-    } finally {
-      setBusy(false);
+      console.error("Registrar cita:", e);
+      alert(e.message || "No se pudo registrar.");
     }
-  };
+  }
+
+  if (loadingEvento) {
+    return (
+      <div className="grid place-items-center min-h-[60vh] text-muted-foreground">
+        Cargando detalle…
+      </div>
+    );
+  }
+
+  if (!evento) {
+    return (
+      <div className="grid place-items-center min-h-[60vh] text-muted-foreground">
+        Evento no encontrado.
+      </div>
+    );
+  }
+
+  const titulo = evento.titulo ?? evento.title ?? "Evento";
+  const lugar  = evento.lugar ?? evento.location ?? "—";
+  const estado = (evento.estado ?? evento.status ?? "active").toString().toLowerCase();
+  const badge =
+    estado === "active" || estado === "activo"
+      ? { text: "Activo", cls: "text-green-400 border-green-400" }
+      : estado === "completed" || estado === "finalizado"
+      ? { text: "Completado", cls: "text-yellow-500 border-yellow-500" }
+      : { text: "Lleno", cls: "text-red-500 border-red-500" };
 
   return (
-    <div style={{ padding: 20, maxWidth: 800 }}>
-      <button className="btn ghost" onClick={() => nav(-1)} style={{ marginBottom: 10 }}>
-        ← Volver
-      </button>
+    <div className="p-8 space-y-6">
+      <Card>
+        <CardHeader className="flex items-start justify-between">
+          <div>
+            <CardTitle className="text-xl">{titulo}</CardTitle>
+            <p className="text-sm text-muted-foreground">{evento.descripcion ?? evento.description ?? ""}</p>
+          </div>
+          <Badge variant="outline" className={badge.cls}>{badge.text}</Badge>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p><strong>Fecha:</strong> {fmtRange(evento)}</p>
+          <p><strong>Lugar:</strong> {lugar}</p>
 
-      <h2 style={{ margin: "6px 0 8px" }}>{ev.titulo}</h2>
-      <p style={{ opacity: 0.85, marginTop: 0 }}>{ev.descripcion || "Sin descripción."}</p>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, margin: "12px 0" }}>
-        <Info label="Inicio" value={fmt(ev.fechaInicio)} />
-        <Info label="Fin" value={fmt(ev.fechaFin)} />
-        <Info label="Lugar" value={ev.lugar || "—"} />
-        <Info label="Cupo" value={ev.cupo ?? "—"} />
-        <Info label="Ocupados" value={cuposInfo.ocupados} />
-        <Info label="Estado" value={ev.estado} />
-      </div>
-
-      <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "center" }}>
-        <button
-          className="btn"
-          disabled={!puedeInscribir || busy}
-          onClick={inscribirme}
-        >
-          {busy
-            ? "Procesando…"
-            : yaInscrito
-            ? "Ya inscrito"
-            : sinCupo
-            ? "Sin cupo"
-            : "Inscribirme"}
-        </button>
-        <button className="btn ghost" onClick={() => nav("/estudiante")}>
-          Ir a mi panel
-        </button>
-      </div>
+          <div className="pt-2">
+            <Button
+              variant="secondary"
+              disabled={disabled}
+              onClick={handleRegistrar}
+              className="w-full max-w-xs"
+            >
+              {loadingCita
+                ? "Verificando inscripción…"
+                : yaInscrito
+                ? "Ya estás inscrito"
+                : "Registrarse"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
-}
-
-function Info({ label, value }) {
-  return (
-    <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 12, padding: 12 }}>
-      <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>{label}</div>
-      <div>{String(value ?? "—")}</div>
-    </div>
-  );
-}
-
-function fmt(ts) {
-  if (!ts) return "—";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleString();
 }

@@ -1,30 +1,21 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 
-// Páginas (estudiante)
+// Páginas públicas
 import Login from "../pages/Login";
+import NotFound from "../pages/NotFound";
+
+// Estudiante
 import DashboardEstudiante from "../pages/DashboardEstudiante";
 import EventoDetalle from "../pages/EventoDetalle";
 import MisCitas from "../pages/MisCitas";
 
-// Páginas (admin)
+// Admin
 import DashboardAdmin from "../pages/DashboardAdmin";
-import EventosAdmin from "../pages/EventosAdmin";
-import CitasAdmin from "../pages/CitasAdmin"; // <-- crea este archivo si aún no
+// import EventosAdmin from "../pages/EventosAdmin";  // ⬅️ ya no lo necesitamos
+import CitasAdmin from "../pages/CitasAdmin";
 
-// Comunes
-import NotFound from "../pages/NotFound";
+// Rutas protegidas (inyectan Header automáticamente)
 import ProtectedRoute from "./ProtectedRoute";
-import NavBar from "../components/NavBar";
-
-// Layout simple con NavBar
-function WithLayout(element) {
-  return (
-    <>
-      <NavBar />
-      {element}
-    </>
-  );
-}
 
 const router = createBrowserRouter([
   // Público
@@ -36,7 +27,7 @@ const router = createBrowserRouter([
     path: "/estudiante",
     element: (
       <ProtectedRoute role="estudiante">
-        {WithLayout(<DashboardEstudiante />)}
+        <DashboardEstudiante />
       </ProtectedRoute>
     ),
   },
@@ -44,7 +35,7 @@ const router = createBrowserRouter([
     path: "/estudiante/evento/:id",
     element: (
       <ProtectedRoute role="estudiante">
-        {WithLayout(<EventoDetalle />)}
+        <EventoDetalle />
       </ProtectedRoute>
     ),
   },
@@ -52,7 +43,7 @@ const router = createBrowserRouter([
     path: "/estudiante/mis-citas",
     element: (
       <ProtectedRoute role="estudiante">
-        {WithLayout(<MisCitas />)}
+        <MisCitas />
       </ProtectedRoute>
     ),
   },
@@ -62,30 +53,30 @@ const router = createBrowserRouter([
     path: "/admin",
     element: (
       <ProtectedRoute role="admin">
-        {WithLayout(<DashboardAdmin />)}
+        <DashboardAdmin />
       </ProtectedRoute>
     ),
   },
+
+  // (Opcional) backward-compat: si alguien entra a /admin/eventos,
+  // lo redirigimos al único dashboard admin.
   {
     path: "/admin/eventos",
-    element: (
-      <ProtectedRoute role="admin">
-        {WithLayout(<EventosAdmin />)}
-      </ProtectedRoute>
-    ),
+    element: <Navigate to="/admin" replace />,
   },
+
+  // Participantes de un evento (desde el botón “Participantes”)
   {
-    // gestión de citas por evento
     path: "/admin/eventos/:eventoId/citas",
     element: (
       <ProtectedRoute role="admin">
-        {WithLayout(<CitasAdmin />)}
+        <CitasAdmin />
       </ProtectedRoute>
     ),
   },
 
   // 404
-  { path: "*", element: WithLayout(<NotFound />) },
+  { path: "*", element: <NotFound /> },
 ]);
 
 export default router;

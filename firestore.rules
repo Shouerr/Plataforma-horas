@@ -2,110 +2,47 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function signedIn() {
-      return request.auth != null;
-    }
+    function signedIn()   { return request.auth != null; }
+    function roleOf(uid)  { return get(/databases/$(database)/documents/users/$(uid)).data.role; }
+    function isAdmin()    { return signedIn() && roleOf(request.auth.uid) == "admin"; }
 
-    function isSelf(uid) {
-      return signedIn() && request.auth.uid == uid;
-    }
-
-    function roleOf(uid) {
-      return get(/databases/$(database)/documents/users/$(uid)).data.role;
-    }
-
-    function isAdmin() {
-      return signedIn() && roleOf(request.auth.uid) == "admin";
-    }
-
-    // Helper: acepta userId o usuarioId
-    function citaUserId(data) {
-      return (data.userId != null) ? data.userId : data.usuarioId;
-    }
-
-    // ---------------- USERS ----------------
+    // USERS
     match /users/{uid} {
-      allow read: if isSelf(uid) || isAdmin();
-      allow create: if isSelf(uid);
-      allow update: if (isSelf(uid) && !("role" in request.resource.data.diff(resource.data).changedKeys()))
-                    || isAdmin();
-      allow delete: if isSelf(uid) || isAdmin();
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update, delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
     }
 
-    // ---------------- EVENTOS ----------------
-    match /eventos/{id} {
+    // EVENTS (única colección)
+    match /events/{id} {
       allow read: if true;
-
-      // Admin: total control
       allow create, update, delete: if isAdmin();
 
-      // Usuarios: solo pueden modificar 'reservados' en ±1 (seguridad de cupo)
+      // (opcional) permitir a estudiantes tocar registeredStudents ±1
       allow update: if signedIn()
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['reservados'])
-        && request.resource.data.cupo == resource.data.cupo
-        && request.resource.data.estado == resource.data.estado
-        && request.resource.data.fechaInicio == resource.data.fechaInicio
-        && request.resource.data.fechaFin == resource.data.fechaFin
-        && request.resource.data.reservados >= 0
-        && request.resource.data.reservados <= resource.data.cupo
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['registeredStudents'])
+        && request.resource.data.maxSpots == resource.data.maxSpots
+        && request.resource.data.status   == resource.data.status
+        && request.resource.data.date     == resource.data.date
+        && request.resource.data.startTime== resource.data.startTime
+        && request.resource.data.endTime  == resource.data.endTime
+        && request.resource.data.location == resource.data.location
+        && request.resource.data.registeredStudents >= 0
+        && request.resource.data.registeredStudents <= resource.data.maxSpots
         && (
-            request.resource.data.reservados == resource.data.reservados + 1 ||
-            request.resource.data.reservados == resource.data.reservados - 1
-          );
+          request.resource.data.registeredStudents == resource.data.registeredStudents + 1 ||
+          request.resource.data.registeredStudents == resource.data.registeredStudents - 1
+        );
     }
 
-    // ---------------- CITAS ----------------
-match /citas/{citaId} {
-  allow read: if signedIn();
-
-  // Crear cita: solo el propio usuario puede crear su cita
-  allow create: if signedIn()
-    && citaUserId(request.resource.data) == request.auth.uid
-    && request.resource.data.estado == "pendiente"
-    && request.resource.data.eventoId is string
-    && request.resource.data.creadoEn is timestamp
-    && citaId == (request.resource.data.eventoId + "_" + request.auth.uid);
-
-  // Actualizar:
-  //  - Estudiante (dueño): puede pasar de pendiente|confirmada -> cancelada
-  //  - Admin: puede establecer estado permitido libremente
-  allow update: if signedIn() && (
-    (
-      // dueño cancela su propia cita (solo cambia 'estado')
-      citaUserId(resource.data) == request.auth.uid
-      && request.resource.data.diff(resource.data).changedKeys().hasOnly(['estado'])
-      && request.resource.data.estado == "cancelada"
-      && resource.data.estado in ["pendiente", "confirmada"]
-      // owner no cambia
-      && citaUserId(request.resource.data) == citaUserId(resource.data)
-      // mismo evento (por si acaso)
-      && request.resource.data.eventoId == resource.data.eventoId
-    )
-    ||
-    (
-      // admin ajusta el estado (solo cambia 'estado')
-      isAdmin()
-      && request.resource.data.diff(resource.data).changedKeys().hasOnly(['estado'])
-      && request.resource.data.estado in ["pendiente","confirmada","cancelada"]
-      // evita cambios de owner/evento desde cliente
-      && citaUserId(request.resource.data) == citaUserId(resource.data)
-      && request.resource.data.eventoId == resource.data.eventoId
-    )
-  );
-
-  // Borrar: dueño si sigue pendiente (opcional)
-  allow delete: if signedIn()
-    && citaUserId(resource.data) == request.auth.uid
-    && resource.data.estado == "pendiente";
-}
-
-    // ---------------- ASISTENCIA / QR ----------------
-    match /asistencia/{id} {
+    // CITAS (deja tu bloque actual tal cual)
+    match /citas/{citaId} {
       allow read: if signedIn();
-      allow create, update, delete: if false;
+      // … tus reglas actuales para create/update/delete …
     }
 
-    match /qrSessions/{id} {
+    // Bloquear completamente la legacy:
+    match /eventos/{id} {
       allow read, write: if false;
     }
   }

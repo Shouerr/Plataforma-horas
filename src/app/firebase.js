@@ -6,12 +6,12 @@ import { getFirestore } from "firebase/firestore";
 // ✅ Debug: verificar variables de entorno en consola
 if (import.meta.env.DEV) {
   console.log("Firebase ENV →", {
-    VITE_FB_API_KEY: import.meta.env.VITE_FB_API_KEY,
-    VITE_FB_AUTH_DOMAIN: import.meta.env.VITE_FB_AUTH_DOMAIN,
-    VITE_FB_PROJECT_ID: import.meta.env.VITE_FB_PROJECT_ID,
-    VITE_FB_STORAGE_BUCKET: import.meta.env.VITE_FB_STORAGE_BUCKET,
-    VITE_FB_MESSAGING_SENDER_ID: import.meta.env.VITE_FB_MESSAGING_SENDER_ID,
-    VITE_FB_APP_ID: import.meta.env.VITE_FB_APP_ID,
+    VITE_FIREABSE_API_KEY: import.meta.env.VITE_FB_API_KEY,
+    VITE_FIREABSE_AUTH_DOMAIN: import.meta.env.VITE_FB_AUTH_DOMAIN,
+    VITE_FIREABSE_PROJECT_ID: import.meta.env.VITE_FB_PROJECT_ID,
+    VITE_FIREABSE_STORAGE_BUCKET: import.meta.env.VITE_FB_STORAGE_BUCKET,
+    VITE_FIREABSE_MESSAGING_SENDER_ID: import.meta.env.VITE_FB_MESSAGING_SENDER_ID,
+    VITE_FIREABSE_APP_ID: import.meta.env.VITE_FB_APP_ID,
   });
 }
 

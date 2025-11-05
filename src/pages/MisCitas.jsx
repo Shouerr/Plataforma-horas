@@ -1,99 +1,86 @@
-import { useEffect, useState } from "react";
+// src/pages/MisCitas.jsx
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate, Link } from "react-router-dom";
-import { watchCitasByUser, cancelarCita } from "../services/citasService";
-import toast from 'react-hot-toast';
+import { watchCitasByUser } from "../services/citasService";
+import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card";
+import { Badge } from "../components/ui/badge";
 
 export default function MisCitas() {
-  const { user } = useAuth();
-  const nav = useNavigate();
-  const [citas, setCitas] = useState([]);
-  const [busy, setBusy] = useState(null);
+  const { user, role } = useAuth();
+  const [rows, setRows] = useState([]);
 
   useEffect(() => {
     if (!user?.uid) return;
-    const unsub = watchCitasByUser(user.uid, setCitas);
+    const unsub = watchCitasByUser(user.uid, setRows);
     return () => unsub && unsub();
-  }, [user]);
+  }, [user?.uid]);
 
-  const cancelar = async (c) => {
-    if (!confirm("¿Cancelar esta cita?")) return;
-    try {
-      setBusy(c.id);
-      await cancelarCita(c.id, user.uid);
-      toast("Cita cancelada ✅");
-    } catch (e) {
-      toast(e?.message || "No se pudo cancelar.");
-    } finally {
-      setBusy(null);
-    }
+  if (!user || role !== "estudiante") return null;
+
+  const horasTotales = useMemo(() => {
+    // suma solo confirmadas; ajusta si quieres incluir pendientes
+    return rows
+      .filter((r) => r.estado === "confirmada")
+      .reduce((acc, r) => acc + Number(r.eventoHoras ?? 0), 0);
+  }, [rows]);
+
+  const fmt = (ts) => {
+    if (!ts) return "—";
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleString("es-CR", {
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit"
+    });
   };
-
-  if (!user?.uid) {
-    return (
-      <div style={{ padding: 20 }}>
-        <p style={{ opacity: 0.7 }}>Inicia sesión para ver tus citas.</p>
-        <button className="btn ghost" onClick={() => nav("/login")}>Ir a login</button>
-      </div>
-    );
-  }
 
   return (
-    <div style={{ padding: 20 }}>
-      <button className="btn ghost" onClick={() => nav(-1)} style={{ marginBottom: 10 }}>
-        ← Volver
-      </button>
-      <h2>Mis Citas</h2>
+    <div className="container mx-auto p-6 space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Mis citas</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="text-sm">
+            <span className="font-semibold">Horas confirmadas: </span>
+            {horasTotales}
+          </div>
 
-      {citas.length === 0 ? (
-        <p style={{ opacity: .7 }}>No tienes citas registradas.</p>
-      ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 10 }}>
-          <thead>
-            <tr style={{ textAlign: "left" }}>
-              <th>Evento</th>
-              <th>Inicio</th>
-              <th>Estado</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {citas.map((c) => (
-              <tr key={c.id} style={{ borderTop: "1px solid rgba(255,255,255,.08)" }}>
-                <td>
-                  <Link to={`/estudiante/evento/${c.eventoId}`}>
-                    {c.eventoTitulo || "Evento sin título"}
-                  </Link>
-                </td>
-                <td>{fmt(c.eventoInicio)}</td>
-                <td>{badge(c.estado)}</td>
-                <td style={{ textAlign: "right" }}>
-                  {(c.estado === "pendiente" || c.estado === "confirmada") ? (
-                    <button className="btn" disabled={busy === c.id} onClick={() => cancelar(c)}>
-                      {busy === c.id ? "Cancelando…" : "Cancelar"}
-                    </button>
-                  ) : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+          {rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Aún no tienes citas.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-muted-foreground border-b">
+                    <th className="py-2 px-3 text-left">Evento</th>
+                    <th className="py-2 px-3 text-left">Horas</th>
+                    <th className="py-2 px-3 text-left">Estado</th>
+                    <th className="py-2 px-3 text-left">Fecha registro</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.id} className="border-b last:border-0">
+                      <td className="py-2 px-3">{r.eventoTitulo}</td>
+                      <td className="py-2 px-3">{r.eventoHoras ?? 0}</td>
+                      <td className="py-2 px-3">
+                        {r.estado === "confirmada" ? (
+                          <Badge className="bg-green-500/10 text-green-600 border-green-500" variant="outline">Confirmada</Badge>
+                        ) : r.estado === "cancelada" ? (
+                          <Badge className="bg-red-500/10 text-red-600 border-red-500" variant="outline">Cancelada</Badge>
+                        ) : (
+                          <Badge variant="secondary">Pendiente</Badge>
+                        )}
+                      </td>
+                      <td className="py-2 px-3">{fmt(r.creadoEn)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
-}
-
-function fmt(ts) {
-  if (!ts) return "—";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleString();
-}
-
-function badge(estado) {
-  const map = {
-    pendiente: "🟡 Pendiente",
-    confirmada: "🟢 Confirmada",
-    cancelada:  "⚪ Cancelada",
-  };
-  return map[estado] || estado;
 }
