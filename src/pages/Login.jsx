@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {signInWithEmailAndPassword, createUserWithEmailAndPassword} from "firebase/auth";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "../app/firebase";
 import { useAuth } from "../context/AuthContext";
@@ -10,17 +10,10 @@ export default function Login() {
   const [mode, setMode] = useState("login"); // "login" | "register"
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
-  const [loading, setLoading] = useState(false); // <-- boolean
   const [msg, setMsg] = useState({ type: "", text: "" });
   const nav = useNavigate();
-  const { user, role } = useAuth();
 
-  // --- helper: timeout defensivo ---
-  const withTimeout = (promise, ms = 12000) =>
-    Promise.race([
-      promise,
-      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms)),
-    ]);
+  const { user, role, login, authLoading, loadingRole } = useAuth();
 
   // Redirige cuando ya hay sesión y rol
   useEffect(() => {
@@ -28,70 +21,42 @@ export default function Login() {
     nav(role === "admin" ? "/admin" : "/estudiante", { replace: true });
   }, [user, role, nav]);
 
-  // Al cambiar de pestaña, limpia estados y asegura que el botón no quede pegado
-  useEffect(() => {
-    setLoading(false);
-    setMsg({ type: "", text: "" });
-  }, [mode]);
-
-  // --- LOGIN ---
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setMsg({ type: "", text: "" });
-    setLoading(true);
-    try {
-      await withTimeout(signInWithEmailAndPassword(auth, email, pass));
-      setMsg({ type: "success", text: "Sesión iniciada." });
-    } catch (err) {
-      console.error("Login error:", err);
-      const text =
-        err?.message === "timeout"
-          ? "Tiempo de espera agotado. Revisa tu conexión/bloqueadores."
-          : err?.code === "auth/invalid-credential"
-          ? "Credenciales inválidas."
-          : "Error al iniciar sesión.";
-      setMsg({ type: "error", text });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Al cambiar de pestaña, limpia estados
+  useEffect(() => setMsg({ type: "", text: "" }), [mode]);
 
   // --- REGISTRO ---
   const handleRegister = async (e) => {
     e.preventDefault();
     setMsg({ type: "", text: "" });
-    setLoading(true);
     try {
-      const cred = await withTimeout(
-        createUserWithEmailAndPassword(auth, email, pass)
-      );
-      // crea perfil con rol por defecto
-      await withTimeout(
-        setDoc(doc(db, "users", cred.user.uid), {
-          email,
-          role: "estudiante",
-          createdAt: new Date(),
-        })
-      );
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      await setDoc(doc(db, "users", cred.user.uid), {
+        email,
+        role: "estudiante",
+        createdAt: new Date(),
+      });
       setMsg({ type: "success", text: "Cuenta creada. Redirigiendo…" });
     } catch (err) {
       console.error("Register error:", err);
       let text = "No se pudo crear la cuenta.";
-      if (err?.message === "timeout") text = "Tiempo de espera agotado.";
-      if (err?.code === "auth/weak-password") text = "La contraseña es muy débil (mín 6).";
-      if (err?.code === "auth/email-already-in-use") text = "Ese correo ya está registrado.";
+      if (err?.code === "auth/weak-password") text = "Contraseña muy débil.";
+      if (err?.code === "auth/email-already-in-use") text = "Correo ya registrado.";
       setMsg({ type: "error", text });
-    } finally {
-      setLoading(false);
     }
   };
 
-  // desactivar formulario si ya hay sesión o está cargando
-  const formDisabled = loading || !!user;
+  // --- LOGIN (usa el AuthContext) ---
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setMsg({ type: "", text: "" });
+    await login(email, pass); // El contexto maneja errores y estados
+  };
+
+  const disabled = authLoading || loadingRole || !!user;
 
   return (
     <div className="auth-wrap">
-      <div className="card" style={{ position: "relative", zIndex: 10 }}>
+      <div className="card">
         <div className="hdr">
           <LogoIcon />
           <div>
@@ -105,28 +70,24 @@ export default function Login() {
           </div>
         </div>
 
-        <div className="tabs" role="tablist" aria-label="modes">
+        <div className="tabs">
           <button
             className={`tab ${mode === "login" ? "active" : ""}`}
             onClick={() => setMode("login")}
-            role="tab"
-            aria-selected={mode === "login"}
-            disabled={formDisabled}
+            disabled={disabled}
           >
             Ya tengo cuenta
           </button>
           <button
             className={`tab ${mode === "register" ? "active" : ""}`}
             onClick={() => setMode("register")}
-            role="tab"
-            aria-selected={mode === "register"}
-            disabled={formDisabled}
+            disabled={disabled}
           >
             Registrarme
           </button>
         </div>
 
-        {/* Mensaje de estado/rol */}
+        {/* Estado / Rol */}
         {user && !role && (
           <div className="msg info" style={{ marginTop: 8 }}>
             Validando tu rol… 🔎
@@ -134,7 +95,8 @@ export default function Login() {
         )}
         {user && role && (
           <div className="msg success" style={{ marginTop: 8 }}>
-            Detectamos tu rol: <b>{role === "admin" ? "Administrador" : "Estudiante"}</b>. Redirigiendo…
+            Detectamos tu rol:{" "}
+            <b>{role === "admin" ? "Administrador" : "Estudiante"}</b>. Redirigiendo…
           </div>
         )}
 
@@ -147,7 +109,7 @@ export default function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            disabled={formDisabled}
+            disabled={disabled}
           />
 
           <label className="lbl">Contraseña</label>
@@ -158,14 +120,14 @@ export default function Login() {
             value={pass}
             onChange={(e) => setPass(e.target.value)}
             required
-            disabled={formDisabled}
+            disabled={disabled}
           />
 
-          {msg?.text && <div className={`msg ${msg.type}`}>{msg.text}</div>}
+          {msg.text && <div className={`msg ${msg.type}`}>{msg.text}</div>}
 
           <div className="row">
-            <button className="btn" type="submit" disabled={formDisabled}>
-              {loading
+            <button className="btn" type="submit" disabled={disabled}>
+              {authLoading || loadingRole
                 ? "Procesando…"
                 : mode === "login"
                 ? "Iniciar sesión"
@@ -179,7 +141,7 @@ export default function Login() {
                 setPass("");
                 setMsg({ type: "", text: "" });
               }}
-              disabled={formDisabled}
+              disabled={disabled}
             >
               Limpiar
             </button>
@@ -203,7 +165,12 @@ function LogoIcon() {
         </linearGradient>
       </defs>
       <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#g)" />
-      <path d="M8 12h8M8 15h6M8 9h8" stroke="white" strokeWidth="1.6" strokeLinecap="round" />
+      <path
+        d="M8 12h8M8 15h6M8 9h8"
+        stroke="white"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
