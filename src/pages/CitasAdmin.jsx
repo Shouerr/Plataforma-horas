@@ -16,7 +16,10 @@ import toast from "react-hot-toast";
 import { ArrowLeft, Check, X, User2, Mail, Calendar } from "lucide-react";
 
 export default function CitasAdmin() {
-  const { eventoId } = useParams();
+  // ✅ Compatibilidad PC: acepta :eventoId o :id
+  const params = useParams();
+  const eventoId = params.eventoId || params.id;
+
   const nav = useNavigate();
 
   const [evento, setEvento] = useState(null);
@@ -31,13 +34,25 @@ export default function CitasAdmin() {
     return () => unsub && unsub();
   }, [eventoId]);
 
-  // Citas del evento
+  // Citas del evento (con manejo de error para no quedarse cargando)
   useEffect(() => {
     if (!eventoId) return;
-    const unsub = watchCitasByEvento(eventoId, (rows) => {
-      setCitas(rows || []);
-      setLoading(false);
-    });
+    const unsub = watchCitasByEvento(
+      eventoId,
+      (rows) => {
+        setCitas(rows || []);
+        setLoading(false);
+      },
+      (err) => {
+        // Nota: si tu service no usa onError, este tercer arg se ignora sin romper nada
+        setLoading(false);
+        const msg =
+          err?.code === "permission-denied"
+            ? "No tienes permisos para ver las citas de este evento (revisa el .env/proyecto Firebase y las Rules)."
+            : err?.message || "No se pudieron cargar las citas.";
+        toast.error(msg);
+      }
+    );
     return () => unsub && unsub();
   }, [eventoId]);
 
@@ -118,19 +133,27 @@ export default function CitasAdmin() {
           Volver
         </Button>
 
-        {/* Resumen rápido */}
+        {/* Resumen rápido (misma fachada) */}
         <div className="flex gap-2 text-sm">
           <Badge variant="outline">Total: {counts.total}</Badge>
+
           <Badge
-            className="bg-green-500/10 text-green-600 border-green-500"
             variant="outline"
+            className="bg-green-50 text-green-700 border-green-400 rounded-full"
           >
             Confirmadas: {counts.confirmadas}
           </Badge>
-          <Badge variant="secondary">Pendientes: {counts.pendientes}</Badge>
+
           <Badge
-            className="bg-red-500/10 text-red-600 border-red-500"
             variant="outline"
+            className="bg-yellow-50 text-yellow-700 border-yellow-400 rounded-full"
+          >
+            Pendientes: {counts.pendientes}
+          </Badge>
+
+          <Badge
+            variant="outline"
+            className="bg-red-50 text-red-700 border-red-400 rounded-full"
           >
             Canceladas: {counts.canceladas}
           </Badge>
