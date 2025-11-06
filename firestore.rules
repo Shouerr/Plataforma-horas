@@ -2,23 +2,26 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function signedIn()   { return request.auth != null; }
-    function roleOf(uid)  { return get(/databases/$(database)/documents/users/$(uid)).data.role; }
-    function isAdmin()    { return signedIn() && roleOf(request.auth.uid) == "admin"; }
+    function signedIn() { return request.auth != null; }
+    function roleOf(uid) { return get(/databases/$(database)/documents/users/$(uid)).data.role; }
+    function isAdmin()  { return signedIn() && roleOf(request.auth.uid) == "admin"; }
 
-    // USERS
+    /* ---------------- USERS ---------------- */
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow create: if signedIn() && request.auth.uid == uid;
       allow update, delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
     }
 
-    // EVENTS (única colección)
+    /* ---------------- EVENTS (colección única) ---------------- */
     match /events/{id} {
+      // Leer: público (o cámbialo a signedIn() si prefieres)
       allow read: if true;
+
+      // Admin puede crear/actualizar/eliminar
       allow create, update, delete: if isAdmin();
 
-      // (opcional) permitir a estudiantes tocar registeredStudents ±1
+      // (opcional) Estudiante puede tocar solo registeredStudents ±1
       allow update: if signedIn()
         && request.resource.data.diff(resource.data).changedKeys().hasOnly(['registeredStudents'])
         && request.resource.data.maxSpots == resource.data.maxSpots
@@ -35,13 +38,31 @@ service cloud.firestore {
         );
     }
 
-    // CITAS (deja tu bloque actual tal cual)
+    /* ---------------- CITAS ----------------
+       - Admin: CRUD total (para cascada desde el panel)
+       - Estudiante: CRUD restringido a sus propias citas
+    ------------------------------------------------------------ */
     match /citas/{citaId} {
       allow read: if signedIn();
-      // … tus reglas actuales para create/update/delete …
+
+      // Admin (necesario para delete en cascada)
+      allow create, update, delete: if isAdmin();
+
+      // Propietario puede crear/leer/actualizar/cancelar su cita
+      allow create: if signedIn()
+        && (request.resource.data.userId == request.auth.uid
+            || request.resource.data.usuarioId == request.auth.uid);
+
+      allow update: if signedIn()
+        && (resource.data.userId == request.auth.uid
+            || resource.data.usuarioId == request.auth.uid);
+
+      allow delete: if signedIn()
+        && (resource.data.userId == request.auth.uid
+            || resource.data.usuarioId == request.auth.uid);
     }
 
-    // Bloquear completamente la legacy:
+    /* ---------------- Bloquear legacy ---------------- */
     match /eventos/{id} {
       allow read, write: if false;
     }
