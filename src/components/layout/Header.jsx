@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { Moon, Sun, LogOut, User, Menu } from "lucide-react";
-import { NavLink } from "react-router-dom";
+
 import { useState } from "react";
 
 export default function Header() {
@@ -26,8 +26,6 @@ export default function Header() {
   const email = user.email || "";
   const photo = user.photoURL || user.avatar || "";
   const initials = name.split(" ").map((n) => n[0]).join("").toUpperCase();
-
-  const isAdmin = role === "admin";
 
   return (
     <header className="bg-card border-b border-border shadow-sm">
@@ -47,14 +45,8 @@ export default function Header() {
           </div>
         </div>
 
-        {/* Nav (desktop) 
-            - Admin: OCULTO (lo mostramos solo en la sub-barra).
-            - Estudiante: visible como antes. */}
-        {!isAdmin && (
-          <nav className="hidden md:flex items-center gap-2">
-            <RoleNav role={role} />
-          </nav>
-        )}
+        {}
+        <nav className="hidden md:flex items-center gap-2" />
 
         {/* Acciones */}
         <div className="flex items-center gap-2">
@@ -63,7 +55,7 @@ export default function Header() {
             {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
           </Button>
 
-          {/* Menú móvil: navegación + perfil */}
+          {/* Menú móvil: solo perfil (sin navegación) */}
           <DropdownMenu open={mobileOpen} onOpenChange={setMobileOpen}>
             <DropdownMenuTrigger asChild className="md:hidden">
               <Button variant="outline" size="icon" aria-label="Menú">
@@ -71,16 +63,12 @@ export default function Header() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 md:hidden">
-              {/* Nav por rol en móvil */}
-              <div className="px-2 py-1.5">
-                <MobileRoleNav role={role} onNavigate={() => setMobileOpen(false)} />
-              </div>
-              <DropdownMenuSeparator />
-              {/* Perfil */}
-              <div className="flex flex-col space-y-1 px-2 pb-2">
+              {}
+              <div className="flex flex-col space-y-1 px-2 pt-2 pb-2">
                 <p className="text-sm font-medium leading-none">{name}</p>
                 {email && <p className="text-xs leading-none text-muted-foreground">{email}</p>}
               </div>
+              <DropdownMenuSeparator />
               <DropdownMenuItem>
                 <User className="mr-2 h-4 w-4" />
                 <span>Perfil</span>
@@ -126,83 +114,7 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Sub-barra:
-          - Admin: mostramos AQUÍ el único chip “Panel”.
-          - Estudiante: no mostramos sub-barra para evitar duplicar. */}
-      {isAdmin && (
-        <div className="border-t border-border">
-          <div className="container mx-auto px-4 py-2">
-            <RoleNav role={role} compact />
-          </div>
-        </div>
-      )}
+      {}
     </header>
-  );
-}
-
-/* ---------- Nav por rol (desktop/sub-barra) ---------- */
-function RoleNav({ role, compact = false }) {
-  const base = "px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-muted";
-  const active = "bg-muted text-foreground";
-  const inactive = "text-muted-foreground";
-
-  if (role === "admin") {
-    // Solo “Panel”
-    return (
-      <div className={`flex items-center gap-1 ${compact ? "" : "ml-4"}`}>
-        <NavLink
-          to="/admin"
-          className={({ isActive }) => `${base} ${isActive ? active : inactive}`}
-          end
-        >
-          Panel
-        </NavLink>
-      </div>
-    );
-  }
-
-  // Estudiante
-  return (
-    <div className={`flex items-center gap-1 ${compact ? "" : "ml-4"}`}>
-      <NavLink
-        to="/estudiante"
-        className={({ isActive }) => `${base} ${isActive ? active : inactive}`}
-        end
-      >
-        Eventos
-      </NavLink>
-      <NavLink
-        to="/estudiante/mis-citas"
-        className={({ isActive }) => `${base} ${isActive ? active : inactive}`}
-      >
-        Mis citas
-      </NavLink>
-    </div>
-  );
-}
-
-/* ---------- Nav móvil dentro del dropdown ---------- */
-function MobileRoleNav({ role, onNavigate }) {
-  const link = "block w-full px-3 py-2 rounded-md text-sm font-medium hover:bg-muted text-foreground";
-
-  if (role === "admin") {
-    return (
-      <div className="grid gap-1">
-        <NavLink to="/admin" className={link} onClick={onNavigate} end>
-          Panel
-        </NavLink>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid gap-1">
-      <NavLink to="/estudiante" className={link} onClick={onNavigate} end>
-        Eventos
-      </NavLink>
-      <NavLink to="/estudiante/mis-citas" className={link} onClick={onNavigate}>
-        Mis citas
-      </NavLink>
-    </div>
   );
 }
