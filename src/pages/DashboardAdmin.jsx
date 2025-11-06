@@ -28,92 +28,69 @@ import {
   doc,
   updateDoc,
   Timestamp,
-  where,
-  getDocs,
-  writeBatch,
-  setDoc,
   deleteDoc,
-  query, // 👈 NECESARIO
-  deleteField,
 } from "firebase/firestore";
 import { db } from "../app/firebase";
 
 import { deleteCitasByEvento } from "../services/citasService";
 
-/* ------------------------ Helpers de horas y unificador ------------------------ */
-function getEventHoursFromRaw(ev) {
-  const direct = ev?.hours ?? ev?.horas;
-  if (typeof direct === "number" && Number.isFinite(direct)) {
-    return Number(direct.toFixed(2));
+/* ---------- helpers de tiempo ---------- */
+function toDateJS(x) {
+  if (!x) return null;
+  if (x?.toDate) return x.toDate();
+  if (x instanceof Date) return isNaN(+x) ? null : x;
+  if (typeof x === "string") {
+    // YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(x)) return new Date(`${x}T00:00:00`);
+    // dd/mm/yyyy (por si guardaste dateFormatted y deseas fallback)
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(x)) {
+      const [dd, mm, yyyy] = x.split("/");
+      return new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
+    }
+    const d = new Date(x);
+    return isNaN(+d) ? null : d;
   }
-  if ((ev?.startTime && ev?.endTime) && (ev?.date || ev?.fechaInicio)) {
-    const day = ev.date ?? ev.fechaInicio;
-    const base = day?.toDate
-      ? day.toDate()
-      : (typeof day === "string" ? new Date(`${day}T00:00:00`) : new Date(day));
-    const toAt = (dateObj, hhmm) => {
-      const [H, M] = String(hhmm).split(":").map(Number);
-      const d = new Date(dateObj);
-      d.setHours(H || 0, M || 0, 0, 0);
-      return d;
-    };
-    const ini = toAt(base, ev.startTime);
-    const fin = toAt(base, ev.endTime);
-    const diff = Math.max(0, (fin - ini) / 36e5);
-    return Number(diff.toFixed(2));
-  }
-  if (ev?.fechaInicio && ev?.fechaFin) {
-    const ini = ev.fechaInicio?.toDate ? ev.fechaInicio.toDate() : new Date(ev.fechaInicio);
-    const fin = ev.fechaFin?.toDate ? ev.fechaFin.toDate() : new Date(ev.fechaFin);
-    const diff = Math.max(0, (fin - ini) / 36e5);
-    return Number(diff.toFixed(2));
-  }
-  return 0;
+  const d = new Date(x);
+  return isNaN(+d) ? null : d;
 }
-
-function unifyEvent(id, data) {
-  const isLegacy =
-    data.titulo !== undefined ||
-    data.fechaInicio !== undefined ||
-    data.cupo !== undefined;
-
-  const title = isLegacy ? (data.titulo ?? "") : (data.title ?? "");
-  const dateTs = isLegacy ? (data.fechaInicio ?? null) : (data.date ?? null);
-  const endTs  = isLegacy ? (data.fechaFin ?? null) : null;
-
-  const startTime = !isLegacy ? (data.startTime ?? "") :
-    (dateTs?.toDate ? dateTs.toDate().toTimeString().slice(0,5) : (data.horaInicio ?? ""));
-  const endTime = !isLegacy ? (data.endTime ?? "") :
-    (endTs?.toDate ? endTs.toDate().toTimeString().slice(0,5) : (data.horaFin ?? ""));
-
-  const status = !isLegacy ? (data.status ?? "active") : (data.estado ?? "activo");
-  const maxSpots = !isLegacy ? (data.maxSpots ?? 0) : (data.cupo ?? 0);
-  const registeredStudents = !isLegacy ? (data.registeredStudents ?? 0) : (data.reservados ?? 0);
-
-  const dateFormatted =
-    data.dateFormatted ??
-    (dateTs?.toDate
-      ? dateTs.toDate().toLocaleDateString("es-CR", { day: "2-digit", month: "2-digit", year: "numeric" })
-      : null);
-
-  const hours = getEventHoursFromRaw(data);
-
-  return {
-    id,
-    title,
-    description: isLegacy ? (data.descripcion ?? "") : (data.description ?? ""),
-    location:   isLegacy ? (data.lugar ?? "")        : (data.location ?? ""),
-    date: dateTs || null,
-    dateFormatted: dateFormatted || "",
-    startTime,
-    endTime,
-    hours,
-    status,
-    maxSpots,
-    registeredStudents,
-    _legacy: isLegacy,
-    _raw: data,
-  };
+function parseHM(hm) {
+  const [H, M] = String(hm || "").split(":").map(n => parseInt(n || "0", 10));
+  return [isNaN(H) ? 0 : H, isNaN(M) ? 0 : M];
+}
+function eventStartMs(ev) {
+  const base = toDateJS(ev?.date);
+  if (!base) return 0;
+  const d = new Date(base);
+  if (ev?.startTime) {
+    const [H, M] = parseHM(ev.startTime);
+    d.setHours(H, M, 0, 0);
+  } else {
+    d.setHours(0, 0, 0, 0);
+  }
+  return d.getTime();
+}
+function eventEndMs(ev) {
+  const base = toDateJS(ev?.date);
+  if (!base) return 0;
+  if (ev?.endTime) {
+    const d = new Date(base);
+    const [H, M] = parseHM(ev.endTime);
+    d.setHours(H, M, 0, 0);
+    return d.getTime();
+  }
+  const d = new Date(base);
+  d.setHours(23, 59, 59, 999);
+  return d.getTime();
+}
+/** completed > full > active */
+function deriveStatus(ev) {
+  const now = Date.now();
+  const max = Number(ev?.maxSpots ?? 0);
+  const reg = Number(ev?.registeredStudents ?? 0);
+  const ended = eventEndMs(ev) <= now;
+  if (ended) return "completed";
+  if (max > 0 && reg >= max) return "full";
+  return "active";
 }
 
 function dateStringToTimestamp(yyyy_mm_dd) {
@@ -122,7 +99,7 @@ function dateStringToTimestamp(yyyy_mm_dd) {
   return Timestamp.fromDate(d);
 }
 
-/* --------------------------------- Componente -------------------------------- */
+/* --------------------------------- componente --------------------------------- */
 export default function DashboardAdmin() {
   const { user, role } = useAuth();
 
@@ -137,33 +114,28 @@ export default function DashboardAdmin() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
 
+  // Solo colección `events`
   useEffect(() => {
-    const unsubs = [];
-    const mergeAndSet = (arrA, arrB) => {
-      const taggedA = arrA.map(d => ({ ...d, _source: "events",  _uid: `events:${d.id}` }));
-      const taggedB = arrB.map(d => ({ ...d, _source: "eventos", _uid: `eventos:${d.id}` }));
-      const map = new Map();
-      [...taggedA, ...taggedB].forEach(x => map.set(x._uid, x));
-      const merged = Array.from(map.values());
-      merged.sort((a, b) => {
-        const ta = a.date?.toMillis?.() ?? 0;
-        const tb = b.date?.toMillis?.() ?? 0;
-        return ta - tb;
-      });
-      setEvents(merged);
+    const unsub = onSnapshot(collection(db, "events"), (snap) => {
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Decorar con status derivado
+      const decorated = list
+        .map(e => ({ ...e, _displayStatus: deriveStatus(e) }))
+        .sort((a,b) => (a?.date?.toMillis?.() ?? 0) - (b?.date?.toMillis?.() ?? 0));
+      setEvents(decorated);
       setLoading(false);
-    };
-    let listA = [], listB = [];
 
-    unsubs.push(onSnapshot(collection(db, "events"), (snap) => {
-      listA = snap.docs.map(d => unifyEvent(d.id, d.data()));
-      mergeAndSet(listA, listB);
-    }));
-    unsubs.push(onSnapshot(collection(db, "eventos"), (snap) => {
-      listB = snap.docs.map(d => unifyEvent(d.id, d.data()));
-      mergeAndSet(listA, listB);
-    }));
-    return () => unsubs.forEach(u => u && u());
+      // Opcional: sincronizar si el status guardado difiere del derivado
+      decorated.forEach(async ev => {
+        const stored = ev.status || "active";
+        if (stored !== ev._displayStatus) {
+          try {
+            await updateDoc(doc(db, "events", ev.id), { status: ev._displayStatus });
+          } catch { /* noop */ }
+        }
+      });
+    });
+    return () => unsub();
   }, []);
 
   useEffect(() => {
@@ -176,36 +148,31 @@ export default function DashboardAdmin() {
   if (!user || role !== "admin") return null;
   if (loading) return <p className="p-6">Cargando eventos…</p>;
 
-  /* ------------------------------- Crear evento ------------------------------ */
+  /* ------------------------------- crear evento ------------------------------- */
   async function handleCreateEvent(newEvent) {
-    const dateTs = newEvent.date;
-    const payloadNew = {
+    const dateTs = newEvent.date ?? null;
+    const payload = {
       title: newEvent.title?.trim() ?? "",
       description: newEvent.description ?? "",
       location: newEvent.location ?? "",
-      date: dateTs ?? null,
+      date: dateTs,
       dateFormatted: newEvent.dateFormatted ?? "",
       startTime: newEvent.startTime ?? "",
       endTime: newEvent.endTime ?? "",
       hours: Number(newEvent.hours ?? 0),
       maxSpots: Number(newEvent.maxSpots ?? 0),
       registeredStudents: 0,
-      status: "active",
+      status: deriveStatus({
+        date: dateTs,
+        startTime: newEvent.startTime,
+        endTime: newEvent.endTime,
+        maxSpots: Number(newEvent.maxSpots ?? 0),
+        registeredStudents: 0,
+      }),
       createdAt: new Date(),
       createdBy: user.uid,
     };
-    const payloadLegacy = {
-      titulo: payloadNew.title,
-      descripcion: payloadNew.description,
-      lugar: payloadNew.location,
-      fechaInicio: dateTs ?? null,
-      fechaFin: null,
-      cupo: payloadNew.maxSpots,
-      reservados: 0,
-      estado: "activo",
-      horas: payloadNew.hours,
-    };
-    await addDoc(collection(db, "events"), { ...payloadNew, ...payloadLegacy });
+    await addDoc(collection(db, "events"), payload);
     setIsCreateDialogOpen(false);
     toast.success("Evento creado correctamente.");
   }
@@ -217,10 +184,10 @@ export default function DashboardAdmin() {
 
   async function handleEditSubmit(form) {
     try {
-      const dateTs =
-        form.date ? dateStringToTimestamp(form.date) : (editing?.date ?? null);
+      const dateTs = form.date ? dateStringToTimestamp(form.date) : (editing?.date ?? null);
+      const registered = Number(editing?.registeredStudents ?? 0);
 
-      const payloadNew = {
+      const next = {
         title: form.title?.trim() ?? "",
         description: form.description ?? "",
         location: form.location ?? "",
@@ -232,30 +199,14 @@ export default function DashboardAdmin() {
         endTime: form.endTime ?? "",
         hours: Number(form.hours ?? 0),
         maxSpots: Number(form.maxSpots ?? 0),
-        status: form.status ?? "active",
       };
 
-      const payloadLegacy = editing?._legacy
-        ? {
-            titulo: payloadNew.title,
-            descripcion: payloadNew.description,
-            lugar: payloadNew.location,
-            fechaInicio: dateTs,
-            cupo: payloadNew.maxSpots,
-            estado:
-              payloadNew.status === "active"
-                ? "activo"
-                : payloadNew.status === "completed"
-                ? "finalizado"
-                : payloadNew.status,
-            horas: payloadNew.hours,
-          }
-        : {};
-
-      await updateDoc(doc(db, "events", editing.id), {
-        ...payloadNew,
-        ...payloadLegacy,
+      next.status = deriveStatus({
+        ...next,
+        registeredStudents: registered,
       });
+
+      await updateDoc(doc(db, "events", editing.id), next);
 
       toast.success("Cambios guardados.");
       setIsEditOpen(false);
@@ -266,15 +217,11 @@ export default function DashboardAdmin() {
     }
   }
 
-  /* --------------------------- Borrado en cascada --------------------------- */
+  /* --------------------------- borrado en cascada --------------------------- */
   async function deleteEventCascade(eventId) {
-    // 1) borrar citas del evento
-    await deleteCitasByEvento(eventId);
-
-    // 2) borrar el evento
+    await deleteCitasByEvento(eventId);   // borra citas asociadas
     await deleteDoc(doc(db, "events", eventId));
   }
-
   async function confirmDelete() {
     if (!pendingDelete) return;
     try {
@@ -289,18 +236,8 @@ export default function DashboardAdmin() {
     }
   }
 
-  const activeCount = events.filter((e) => (e.status ?? "active") === "active" || (e._legacy && e.status === "activo")).length;
-  const completedCount = events.filter((e) =>
-    (e.status ?? "") === "completed" || (e._legacy && e.status === "finalizado")
-  ).length;
-
-  const toInputDate = (val) => {
-    const d = val?.toDate ? val.toDate() : typeof val === "string" ? new Date(val) : val;
-    if (!d || isNaN(+d)) return "";
-    const off = d.getTimezoneOffset();
-    const local = new Date(d.getTime() - off * 60000);
-    return local.toISOString().slice(0, 10);
-  };
+  const activeCount = events.filter(e => e._displayStatus === "active").length;
+  const completedCount = events.filter(e => e._displayStatus === "completed").length;
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -407,64 +344,48 @@ export default function DashboardAdmin() {
 
                     <Badge
                       className={
-                        (event.status === "active" || event.status === "activo")
+                        event._displayStatus === "active"
                           ? "bg-green-500/10 text-green-600 border-green-500"
-                          : (event.status === "completed" || event.status === "finalizado")
+                          : event._displayStatus === "completed"
                           ? "bg-yellow-500/10 text-yellow-600 border-yellow-500"
                           : "bg-red-500/10 text-red-500 border-red-500"
                       }
-                      variant={(event.status === "active" || event.status === "activo") ? "outline" : "secondary"}
+                      variant={event._displayStatus === "active" ? "outline" : "secondary"}
                     >
-                      {(event.status === "active" || event.status === "activo")
-                        ? "Activo"
-                        : (event.status === "completed" || event.status === "finalizado")
-                        ? "Completado"
-                        : "Lleno"}
+                      {event._displayStatus === "active" ? "Activo"
+                        : event._displayStatus === "completed" ? "Completado" : "Lleno"}
                     </Badge>
                   </div>
 
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm text-muted-foreground">
                     <div className="flex items-center">
                       <Calendar className="w-4 h-4 mr-2" />
-                      {event.dateFormatted ||
-                        (event?.date?.toDate
-                          ? event.date.toDate().toLocaleDateString("es-CR", {
-                              day: "2-digit",
-                              month: "2-digit",
-                              year: "numeric",
-                            })
-                          : "Sin fecha")}
+                      {event.date?.toDate
+                        ? event.date.toDate().toLocaleDateString("es-CR",{day:"2-digit",month:"2-digit",year:"numeric"})
+                        : (event.dateFormatted || "Sin fecha")}
                     </div>
                     <div className="flex items-center">
                       <Clock className="w-4 h-4 mr-2" />
-                      {event.startTime} {event.endTime ? `- ${event.endTime}` : ""}
+                      {(event.startTime || "--:--")}{event.endTime ? ` - ${event.endTime}` : ""}
                     </div>
                     <div className="flex items-center">
                       <Users className="w-4 h-4 mr-2" />
-                      {event.location}
+                      {event.location || "—"}
                     </div>
                     <div className="flex items-center">
                       <CheckCircle className="w-4 h-4 mr-2" />
-                      {Number(event.hours).toFixed(2)} horas
+                      {Number(event.hours ?? 0).toFixed(2)} horas
                     </div>
                   </div>
 
                   <div className="flex justify-between items-center mt-3">
                     <div className="flex items-center gap-2">
                       <p className="text-sm">
-                        <strong className="text-foreground">
-                          {event.registeredStudents ?? 0}
-                        </strong>
-                        /{event.maxSpots} inscritos
+                        <strong className="text-foreground">{event.registeredStudents ?? 0}</strong>/{event.maxSpots} inscritos
                       </p>
 
                       <Link to={`/admin/eventos/${event.id}/citas`}>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2 text-xs flex items-center gap-1"
-                          title="Ver participantes"
-                        >
+                        <Button size="sm" variant="outline" className="h-7 px-2 text-xs flex items-center gap-1" title="Ver participantes">
                           <Users className="w-3.5 h-3.5" />
                           Participantes
                         </Button>
@@ -487,10 +408,7 @@ export default function DashboardAdmin() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => {
-                          setPendingDelete({ id: event.id, title: event.title });
-                          setConfirmOpen(true);
-                        }}
+                        onClick={() => { setPendingDelete({ id: event.id, title: event.title }); setConfirmOpen(true); }}
                         className="text-red-500"
                       >
                         <Trash2 className="w-4 h-4 mr-2" />
@@ -536,19 +454,14 @@ export default function DashboardAdmin() {
           <DialogHeader>
             <DialogTitle>¿Eliminar evento?</DialogTitle>
             <DialogDescription>
-              Vas a eliminar{" "}
-              <span className="font-medium text-foreground">{pendingDelete?.title}</span>. Esta acción no se puede deshacer.
+              Vas a eliminar <span className="font-medium text-foreground">{pendingDelete?.title}</span>. Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose asChild>
               <Button variant="outline">Cancelar</Button>
             </DialogClose>
-            <Button
-              variant="outline"
-              className="text-red-600 border-red-200 hover:bg-red-50"
-              onClick={confirmDelete}
-            >
+            <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={confirmDelete}>
               Eliminar
             </Button>
           </DialogFooter>
@@ -569,19 +482,15 @@ function EditEventForm({ initial, onCancel, onSubmit, toInputDate }) {
     location: initial.location || "",
     maxSpots: String(initial.maxSpots ?? 0),
     hours: String(initial.hours ?? 0),
-    status: (initial.status === "activo" ? "active" : initial.status) || "active",
+    status: (initial.status || "active"),
   });
 
-  const input =
-    "w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring transition";
+  const input = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring transition";
   const label = "block text-sm font-medium mb-1";
   const handle = (e) => setF((s) => ({ ...s, [e.target.name]: e.target.value }));
 
   return (
-    <form
-      onSubmit={(e) => { e.preventDefault(); onSubmit?.(f); }}
-      className="space-y-4"
-    >
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit?.(f); }} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
           <label className={label}>Título *</label>
@@ -624,7 +533,7 @@ function EditEventForm({ initial, onCancel, onSubmit, toInputDate }) {
         </div>
 
         <div className="col-span-2">
-          <label className={label}>Estado</label>
+          <label className={label}>Estado (se recalcula automáticamente)</label>
           <select className={input} name="status" value={f.status} onChange={handle}>
             <option value="active">Activo</option>
             <option value="completed">Completado</option>
