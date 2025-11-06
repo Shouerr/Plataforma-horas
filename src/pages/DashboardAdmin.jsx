@@ -311,12 +311,12 @@ export default function DashboardAdmin() {
         <Card className="shadow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-yellow-500" />
+              <AlertTriangle className="w-4 h-4 text-blue-500" />
               Completados
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-500">{completedCount}</div>
+            <div className="text-2xl font-bold text-blue-500">{completedCount}</div>
             <p className="text-xs text-muted-foreground">eventos finalizados</p>
           </CardContent>
         </Card>
@@ -347,7 +347,7 @@ export default function DashboardAdmin() {
                         event._displayStatus === "active"
                           ? "bg-green-500/10 text-green-600 border-green-500"
                           : event._displayStatus === "completed"
-                          ? "bg-yellow-500/10 text-yellow-600 border-yellow-500"
+                          ? "bg-blue-500/10 text-blue-500 border-blue-700"
                           : "bg-red-500/10 text-red-500 border-red-500"
                       }
                       variant={event._displayStatus === "active" ? "outline" : "secondary"}
