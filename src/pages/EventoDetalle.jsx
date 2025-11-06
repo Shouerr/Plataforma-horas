@@ -1,5 +1,5 @@
 // src/pages/EventoDetalle.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -66,7 +66,6 @@ export default function EventoDetalle() {
           if (!cancel) setMiCita(null);
         }
       } catch (e) {
-        // Si Auth no estaba listo al primer render, evitamos romper la UI
         console.warn("[EventoDetalle] getCitaByEventAndUser:", e?.message);
         if (!cancel) setMiCita(null);
       } finally {
@@ -83,15 +82,20 @@ export default function EventoDetalle() {
     loadingCita ||
     !evento ||
     yaInscrito ||
-    (evento.maxSpots ?? evento.cupo ?? 0) <= (evento.registeredStudents ?? evento.reservados ?? 0);
+    ( (evento.maxSpots ?? evento.cupo ?? 0) <= (evento.registeredStudents ?? evento.reservados ?? 0) );
 
   async function handleRegistrar() {
     if (!user?.uid || !evento?.id) return;
+    // confirmación previa
+    if (!window.confirm("¿Deseas registrarte en este evento?")) return;
+
     try {
-      await crearCita({ evento, user });
+      await crearCita({ evento, user });   // debe crear cita (pendiente) y hacer +1 seguro
       // recargar cita luego del registro
       const c = await getCitaByEventAndUser(evento.id, user.uid);
       setMiCita(c);
+      // (opcional) toast aquí si usas react-hot-toast
+      // toast.success("Inscripción enviada. Queda pendiente de confirmación.");
     } catch (e) {
       console.error("Registrar cita:", e);
       alert(e.message || "No se pudo registrar.");

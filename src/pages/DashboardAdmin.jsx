@@ -22,39 +22,54 @@ import {
 } from "lucide-react";
 
 import {
-  collection, onSnapshot, addDoc, doc, updateDoc, Timestamp,
-  where, getDocs, writeBatch, query,
+  collection,
+  onSnapshot,
+  addDoc,
+  doc,
+  updateDoc,
+  Timestamp,
+  where,
+  getDocs,
+  writeBatch,
+  setDoc,
+  deleteDoc,
+  query, // 👈 NECESARIO
+  deleteField,
 } from "firebase/firestore";
 import { db } from "../app/firebase";
-import { deleteField } from "firebase/firestore";
 
-/* ---- Util: horas decimales (1 decimal) a partir de hours/horas o start/end ---- */
-function diffHours1Dec(startTime, endTime) {
-  if (!startTime || !endTime) return 0;
-  const [h1, m1] = String(startTime).split(":").map(Number);
-  const [h2, m2] = String(endTime).split(":").map(Number);
-  const diff = Math.max(0, (h2 + (m2 || 0) / 60) - (h1 + (m1 || 0) / 60));
-  return Math.round(diff * 10) / 10;
-}
+import { deleteCitasByEvento } from "../services/citasService";
 
+/* ------------------------ Helpers de horas y unificador ------------------------ */
 function getEventHoursFromRaw(ev) {
   const direct = ev?.hours ?? ev?.horas;
   if (typeof direct === "number" && Number.isFinite(direct)) {
-    return Math.round(direct * 10) / 10;
+    return Number(direct.toFixed(2));
   }
   if ((ev?.startTime && ev?.endTime) && (ev?.date || ev?.fechaInicio)) {
-    return diffHours1Dec(ev.startTime, ev.endTime);
+    const day = ev.date ?? ev.fechaInicio;
+    const base = day?.toDate
+      ? day.toDate()
+      : (typeof day === "string" ? new Date(`${day}T00:00:00`) : new Date(day));
+    const toAt = (dateObj, hhmm) => {
+      const [H, M] = String(hhmm).split(":").map(Number);
+      const d = new Date(dateObj);
+      d.setHours(H || 0, M || 0, 0, 0);
+      return d;
+    };
+    const ini = toAt(base, ev.startTime);
+    const fin = toAt(base, ev.endTime);
+    const diff = Math.max(0, (fin - ini) / 36e5);
+    return Number(diff.toFixed(2));
   }
   if (ev?.fechaInicio && ev?.fechaFin) {
     const ini = ev.fechaInicio?.toDate ? ev.fechaInicio.toDate() : new Date(ev.fechaInicio);
     const fin = ev.fechaFin?.toDate ? ev.fechaFin.toDate() : new Date(ev.fechaFin);
     const diff = Math.max(0, (fin - ini) / 36e5);
-    return Math.round(diff * 10) / 10;
+    return Number(diff.toFixed(2));
   }
   return 0;
 }
-
-const fmtHours = (h) => Number(h || 0).toLocaleString("es-CR", { maximumFractionDigits: 1 });
 
 function unifyEvent(id, data) {
   const isLegacy =
@@ -107,6 +122,7 @@ function dateStringToTimestamp(yyyy_mm_dd) {
   return Timestamp.fromDate(d);
 }
 
+/* --------------------------------- Componente -------------------------------- */
 export default function DashboardAdmin() {
   const { user, role } = useAuth();
 
@@ -122,17 +138,32 @@ export default function DashboardAdmin() {
   const [pendingDelete, setPendingDelete] = useState(null);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "events"), (snap) => {
-      const list = snap.docs.map((d) => unifyEvent(d.id, d.data()));
-      list.sort((a, b) => {
+    const unsubs = [];
+    const mergeAndSet = (arrA, arrB) => {
+      const taggedA = arrA.map(d => ({ ...d, _source: "events",  _uid: `events:${d.id}` }));
+      const taggedB = arrB.map(d => ({ ...d, _source: "eventos", _uid: `eventos:${d.id}` }));
+      const map = new Map();
+      [...taggedA, ...taggedB].forEach(x => map.set(x._uid, x));
+      const merged = Array.from(map.values());
+      merged.sort((a, b) => {
         const ta = a.date?.toMillis?.() ?? 0;
         const tb = b.date?.toMillis?.() ?? 0;
         return ta - tb;
       });
-      setEvents(list);
+      setEvents(merged);
       setLoading(false);
-    });
-    return () => unsub();
+    };
+    let listA = [], listB = [];
+
+    unsubs.push(onSnapshot(collection(db, "events"), (snap) => {
+      listA = snap.docs.map(d => unifyEvent(d.id, d.data()));
+      mergeAndSet(listA, listB);
+    }));
+    unsubs.push(onSnapshot(collection(db, "eventos"), (snap) => {
+      listB = snap.docs.map(d => unifyEvent(d.id, d.data()));
+      mergeAndSet(listA, listB);
+    }));
+    return () => unsubs.forEach(u => u && u());
   }, []);
 
   useEffect(() => {
@@ -145,15 +176,9 @@ export default function DashboardAdmin() {
   if (!user || role !== "admin") return null;
   if (loading) return <p className="p-6">Cargando eventos…</p>;
 
+  /* ------------------------------- Crear evento ------------------------------ */
   async function handleCreateEvent(newEvent) {
     const dateTs = newEvent.date;
-
-    // Prioriza horas calculadas desde HH:mm; si vienen, respétalas como número
-    let hours = Number(newEvent.hours ?? 0);
-    if ((!Number.isFinite(hours) || hours === 0) && newEvent.startTime && newEvent.endTime) {
-      hours = diffHours1Dec(newEvent.startTime, newEvent.endTime);
-    }
-
     const payloadNew = {
       title: newEvent.title?.trim() ?? "",
       description: newEvent.description ?? "",
@@ -162,15 +187,25 @@ export default function DashboardAdmin() {
       dateFormatted: newEvent.dateFormatted ?? "",
       startTime: newEvent.startTime ?? "",
       endTime: newEvent.endTime ?? "",
-      hours: Number.isFinite(hours) ? hours : 0, // número con punto, 1 decimal esperado
+      hours: Number(newEvent.hours ?? 0),
       maxSpots: Number(newEvent.maxSpots ?? 0),
       registeredStudents: 0,
       status: "active",
       createdAt: new Date(),
       createdBy: user.uid,
     };
-
-    await addDoc(collection(db, "events"), payloadNew);
+    const payloadLegacy = {
+      titulo: payloadNew.title,
+      descripcion: payloadNew.description,
+      lugar: payloadNew.location,
+      fechaInicio: dateTs ?? null,
+      fechaFin: null,
+      cupo: payloadNew.maxSpots,
+      reservados: 0,
+      estado: "activo",
+      horas: payloadNew.hours,
+    };
+    await addDoc(collection(db, "events"), { ...payloadNew, ...payloadLegacy });
     setIsCreateDialogOpen(false);
     toast.success("Evento creado correctamente.");
   }
@@ -185,12 +220,6 @@ export default function DashboardAdmin() {
       const dateTs =
         form.date ? dateStringToTimestamp(form.date) : (editing?.date ?? null);
 
-      // Recalcular horas si procede
-      let hours = Number(form.hours ?? 0);
-      if ((!Number.isFinite(hours) || hours === 0) && form.startTime && form.endTime) {
-        hours = diffHours1Dec(form.startTime, form.endTime);
-      }
-
       const payloadNew = {
         title: form.title?.trim() ?? "",
         description: form.description ?? "",
@@ -201,12 +230,32 @@ export default function DashboardAdmin() {
           : (editing?.dateFormatted ?? ""),
         startTime: form.startTime ?? "",
         endTime: form.endTime ?? "",
-        hours: Number.isFinite(hours) ? hours : 0,
+        hours: Number(form.hours ?? 0),
         maxSpots: Number(form.maxSpots ?? 0),
         status: form.status ?? "active",
       };
 
-      await updateDoc(doc(db, "events", editing.id), payloadNew);
+      const payloadLegacy = editing?._legacy
+        ? {
+            titulo: payloadNew.title,
+            descripcion: payloadNew.description,
+            lugar: payloadNew.location,
+            fechaInicio: dateTs,
+            cupo: payloadNew.maxSpots,
+            estado:
+              payloadNew.status === "active"
+                ? "activo"
+                : payloadNew.status === "completed"
+                ? "finalizado"
+                : payloadNew.status,
+            horas: payloadNew.hours,
+          }
+        : {};
+
+      await updateDoc(doc(db, "events", editing.id), {
+        ...payloadNew,
+        ...payloadLegacy,
+      });
 
       toast.success("Cambios guardados.");
       setIsEditOpen(false);
@@ -217,17 +266,13 @@ export default function DashboardAdmin() {
     }
   }
 
+  /* --------------------------- Borrado en cascada --------------------------- */
   async function deleteEventCascade(eventId) {
-    const batch = writeBatch(db);
+    // 1) borrar citas del evento
+    await deleteCitasByEvento(eventId);
 
-    const citasQ = query(collection(db, "citas"), where("eventoId", "==", eventId));
-    const citasSnap = await getDocs(citasQ);
-    citasSnap.forEach((d) => {
-      batch.delete(doc(db, "citas", d.id));
-    });
-
-    batch.delete(doc(db, "events", eventId));
-    await batch.commit();
+    // 2) borrar el evento
+    await deleteDoc(doc(db, "events", eventId));
   }
 
   async function confirmDelete() {
@@ -244,47 +289,7 @@ export default function DashboardAdmin() {
     }
   }
 
-  async function cleanLegacyFields() {
-    if (!window.confirm("¿Deseas eliminar los campos legacy (titulo, descripcion, etc.) de 'events'?")) return;
-
-    try {
-      const snap = await getDocs(collection(db, "events"));
-      if (snap.empty) {
-        toast("No hay documentos en 'events'.");
-        return;
-      }
-
-      let cleaned = 0;
-      for (const d of snap.docs) {
-        try {
-          await updateDoc(doc(db, "events", d.id), {
-            titulo: deleteField(),
-            descripcion: deleteField(),
-            lugar: deleteField(),
-            fechaInicio: deleteField(),
-            fechaFin: deleteField(),
-            cupo: deleteField(),
-            reservados: deleteField(),
-            estado: deleteField(),
-            horas: deleteField(),
-          });
-          cleaned++;
-        } catch (err) {
-          console.error(`❌ Error limpiando ${d.id}:`, err.code, err.message);
-        }
-      }
-
-      toast.success(`✅ Limpieza completada: ${cleaned} documentos actualizados.`);
-    } catch (err) {
-      console.error("Error en limpieza:", err);
-      toast.error("Error al limpiar campos legacy. Revisa la consola.");
-    }
-  }
-
-  const activeCount = events.filter((e) =>
-    (e.status ?? "active") === "active" || (e._legacy && e.status === "activo")
-  ).length;
-
+  const activeCount = events.filter((e) => (e.status ?? "active") === "active" || (e._legacy && e.status === "activo")).length;
   const completedCount = events.filter((e) =>
     (e.status ?? "") === "completed" || (e._legacy && e.status === "finalizado")
   ).length;
@@ -322,15 +327,6 @@ export default function DashboardAdmin() {
               <CreateEventForm onSubmit={handleCreateEvent} />
             </DialogContent>
           </Dialog>
-
-          {/* Botón limpiar legacy */}
-          <Button
-            variant="outline"
-            className="border-green-300 text-green-500 hover:bg-green-50"
-            onClick={cleanLegacyFields}
-          >
-            Limpiar legacy
-          </Button>
         </div>
       </div>
 
@@ -449,11 +445,10 @@ export default function DashboardAdmin() {
                     </div>
                     <div className="flex items-center">
                       <CheckCircle className="w-4 h-4 mr-2" />
-                      {fmtHours(event.hours)} horas
+                      {Number(event.hours).toFixed(2)} horas
                     </div>
                   </div>
 
-                  {/* Línea inferior */}
                   <div className="flex justify-between items-center mt-3">
                     <div className="flex items-center gap-2">
                       <p className="text-sm">
@@ -563,7 +558,7 @@ export default function DashboardAdmin() {
   );
 }
 
-/* ======= Formulario de EDICIÓN ======= */
+/* ---------------------------- Formulario de edición ---------------------------- */
 function EditEventForm({ initial, onCancel, onSubmit, toInputDate }) {
   const [f, setF] = useState({
     title: initial.title || "",
@@ -576,13 +571,6 @@ function EditEventForm({ initial, onCancel, onSubmit, toInputDate }) {
     hours: String(initial.hours ?? 0),
     status: (initial.status === "activo" ? "active" : initial.status) || "active",
   });
-
-  useEffect(() => {
-    if (f.startTime && f.endTime) {
-      const dec = diffHours1Dec(f.startTime, f.endTime);
-      setF((s) => ({ ...s, hours: String(dec) }));
-    }
-  }, [f.startTime, f.endTime]);
 
   const input =
     "w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring transition";
@@ -631,14 +619,8 @@ function EditEventForm({ initial, onCancel, onSubmit, toInputDate }) {
         </div>
 
         <div>
-          <label className={label}>Horas servicio (auto)</label>
-          <input
-            className={input}
-            name="hours"
-            value={Number(f.hours || 0).toLocaleString("es-CR", { maximumFractionDigits: 1 })}
-            readOnly
-          />
-          <p className="text-xs text-muted-foreground mt-1">Se calcula a 1 decimal a partir de inicio/fin.</p>
+          <label className={label}>Horas servicio *</label>
+          <input type="number" min="0" step="0.5" className={input} name="hours" value={f.hours} onChange={handle} required />
         </div>
 
         <div className="col-span-2">

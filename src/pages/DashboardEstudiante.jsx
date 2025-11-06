@@ -16,23 +16,20 @@ const HORAS_OBJETIVO = 60;
 /* ====================== helpers ====================== */
 const norm = (v) => (v == null ? "" : String(v).trim().toLowerCase());
 const getTitulo = (ev) => ev._titulo ?? ev.titulo ?? ev.title ?? "Evento";
-const getLugar = (ev) => ev._lugar ?? ev.lugar ?? ev.location ?? "—";
+const getLugar  = (ev) => ev._lugar  ?? ev.lugar  ?? ev.location ?? "—";
 const getFechaInicio = (ev) => ev._fechaInicio ?? ev.fechaInicio ?? ev.date ?? null;
-const getFechaFin = (ev) => ev._fechaFin ?? ev.fechaFin ?? null;
+const getFechaFin    = (ev) => ev._fechaFin    ?? ev.fechaFin    ?? null;
 const isActive = (ev) => norm(ev.estado) === "activo" || norm(ev.status) === "active";
 
 function formatEventRange(ev) {
   const dateTs = ev.date ?? getFechaInicio(ev);
-  const start = ev.startTime;
-  const end = ev.endTime;
+  const start  = ev.startTime;
+  const end    = ev.endTime;
 
   if (dateTs && (start || end)) {
     const d = dateTs?.toDate ? dateTs.toDate() : new Date(dateTs);
     const fecha = d.toLocaleDateString("es-CR", {
-      weekday: "short",
-      year: "numeric",
-      month: "short",
-      day: "numeric",
+      weekday: "short", year: "numeric", month: "short", day: "numeric",
     });
     const rango = `${start || "—"} - ${end || "—"}`;
     return `${fecha}, ${rango}`;
@@ -43,20 +40,11 @@ function formatEventRange(ev) {
   if (ini) {
     const di = ini?.toDate ? ini.toDate() : new Date(ini);
     const base = di.toLocaleDateString("es-CR", {
-      weekday: "short",
-      year: "numeric",
-      month: "short",
-      day: "numeric",
+      weekday: "short", year: "numeric", month: "short", day: "numeric",
     });
     if (fin) {
       const fi = fin?.toDate ? fin.toDate() : new Date(fin);
-      const rangoHoras = `${di.toLocaleTimeString("es-CR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })} - ${fi.toLocaleTimeString("es-CR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })}`;
+      const rangoHoras = `${di.toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit" })} - ${fi.toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit" })}`;
       return `${base}, ${rangoHoras}`;
     }
     return base;
@@ -281,7 +269,6 @@ export default function DashboardEstudiante() {
   }
 
   return (
-    // 👇 SIN forzar "dark": deja que el theme global controle claro/oscuro
     <div className="p-8 space-y-8 bg-background text-foreground min-h-screen">
       {/* Encabezado */}
       <section>
@@ -299,9 +286,7 @@ export default function DashboardEstudiante() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">{horasAcumuladas.toFixed(2)}h</p>
-            <p className="text-xs text-muted-foreground">
-              de {HORAS_OBJETIVO} horas requeridas
-            </p>
+            <p className="text-xs text-muted-foreground">de {HORAS_OBJETIVO} horas requeridas</p>
           </CardContent>
         </Card>
 
@@ -320,9 +305,7 @@ export default function DashboardEstudiante() {
             <CardTitle className="text-sm font-medium">Asistencias</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-green-600 dark:text-green-400">
-              {citasConfirmadas.length}
-            </p>
+            <p className="text-3xl font-bold text-green-400">{citasConfirmadas.length}</p>
             <p className="text-xs text-muted-foreground">eventos completados</p>
           </CardContent>
         </Card>
@@ -332,7 +315,7 @@ export default function DashboardEstudiante() {
             <CardTitle className="text-sm font-medium">Advertencias</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">0</p>
+            <p className="text-3xl font-bold text-yellow-400">0</p>
             <p className="text-xs text-muted-foreground">máximo permitido: 2</p>
           </CardContent>
         </Card>
@@ -376,17 +359,15 @@ export default function DashboardEstudiante() {
                       <CardTitle className="text-base flex items-center gap-2">
                         {getTitulo(ev)}
                         {etiqueta && (
-                          <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-400">
+                          <Badge variant="outline" className="text-blue-400 border-blue-400">
                             {etiqueta}
                           </Badge>
                         )}
                       </CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        {formatEventRange(ev)}
-                      </p>
+                      <p className="text-sm text-muted-foreground">{formatEventRange(ev)}</p>
                       <p className="text-sm text-muted-foreground">{getLugar(ev)}</p>
                     </div>
-                    <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-300 dark:border-green-400">
+                    <Badge variant="outline" className="text-green-400 border-green-400">
                       Confirmado
                     </Badge>
                   </CardHeader>
@@ -417,24 +398,18 @@ export default function DashboardEstudiante() {
                     <CardTitle className="text-base flex items-center gap-2">
                       {getTitulo(ev)}
                       {etiqueta && (
-                        <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-400">
+                        <Badge variant="outline" className="text-blue-400 border-blue-400">
                           {etiqueta}
                         </Badge>
                       )}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm text-muted-foreground">
-                    <p>
-                      <strong>Fecha:</strong> {formatEventRange(ev)}
-                    </p>
-                    <p>
-                      <strong>Lugar:</strong> {getLugar(ev)}
-                    </p>
+                    <p><strong>Fecha:</strong> {formatEventRange(ev)}</p>
+                    <p><strong>Lugar:</strong> {getLugar(ev)}</p>
 
                     {yaInscrito ? (
-                      <Button className="w-full mt-2" disabled>
-                        Ya estás inscrito
-                      </Button>
+                      <Button className="w-full mt-2" disabled>Ya estás inscrito</Button>
                     ) : (
                       <Button
                         variant="secondary"
