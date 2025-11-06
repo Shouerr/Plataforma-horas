@@ -27,6 +27,8 @@ export default function Header() {
   const photo = user.photoURL || user.avatar || "";
   const initials = name.split(" ").map((n) => n[0]).join("").toUpperCase();
 
+  const isAdmin = role === "admin";
+
   return (
     <header className="bg-card border-b border-border shadow-sm">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
@@ -37,7 +39,7 @@ export default function Header() {
           </div>
           <div className="truncate">
             <h1 className="text-xl font-bold text-foreground leading-tight truncate">
-              Universidad Latina
+              Universidad Latina de Costa Rica
             </h1>
             <p className="text-sm text-muted-foreground truncate">
               Escuela de Gastronomía y Hotelería
@@ -45,10 +47,14 @@ export default function Header() {
           </div>
         </div>
 
-        {/* Nav (desktop) */}
-        <nav className="hidden md:flex items-center gap-2">
-          <RoleNav role={role} />
-        </nav>
+        {/* Nav (desktop) 
+            - Admin: OCULTO (lo mostramos solo en la sub-barra).
+            - Estudiante: visible como antes. */}
+        {!isAdmin && (
+          <nav className="hidden md:flex items-center gap-2">
+            <RoleNav role={role} />
+          </nav>
+        )}
 
         {/* Acciones */}
         <div className="flex items-center gap-2">
@@ -120,25 +126,28 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Nav (sub-barra visible solo en desktop para separar visualmente) */}
-      <div className="hidden md:block border-t border-border">
-        <div className="container mx-auto px-4 py-2">
-          <RoleNav role={role} compact />
+      {/* Sub-barra:
+          - Admin: mostramos AQUÍ el único chip “Panel”.
+          - Estudiante: no mostramos sub-barra para evitar duplicar. */}
+      {isAdmin && (
+        <div className="border-t border-border">
+          <div className="container mx-auto px-4 py-2">
+            <RoleNav role={role} compact />
+          </div>
         </div>
-      </div>
+      )}
     </header>
   );
 }
 
-/* ---------- Nav por rol (desktop) ---------- */
+/* ---------- Nav por rol (desktop/sub-barra) ---------- */
 function RoleNav({ role, compact = false }) {
-  const base =
-    "px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-muted";
-  const active =
-    "bg-muted text-foreground";
+  const base = "px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-muted";
+  const active = "bg-muted text-foreground";
   const inactive = "text-muted-foreground";
 
   if (role === "admin") {
+    // Solo “Panel”
     return (
       <div className={`flex items-center gap-1 ${compact ? "" : "ml-4"}`}>
         <NavLink
@@ -148,7 +157,6 @@ function RoleNav({ role, compact = false }) {
         >
           Panel
         </NavLink>
-        {/* No mostramos rutas viejas (como /admin/eventos); se navega al detalle desde el propio panel */}
       </div>
     );
   }
@@ -175,8 +183,7 @@ function RoleNav({ role, compact = false }) {
 
 /* ---------- Nav móvil dentro del dropdown ---------- */
 function MobileRoleNav({ role, onNavigate }) {
-  const link =
-    "block w-full px-3 py-2 rounded-md text-sm font-medium hover:bg-muted text-foreground";
+  const link = "block w-full px-3 py-2 rounded-md text-sm font-medium hover:bg-muted text-foreground";
 
   if (role === "admin") {
     return (
