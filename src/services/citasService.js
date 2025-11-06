@@ -90,19 +90,32 @@ export async function getCitaByEventAndUser(eventId, userId) {
 }
 
 /** Suscripción a citas por evento (ordenadas por creadoEn) */
-export function watchCitasByEvento(eventoId, cb) {
-  if (!eventoId) return () => {};
+export const watchCitasByEvento = (eventoId, cb, onError) => {
+  // Asegura que tenemos un id válido
+  if (!eventoId) {
+    onError && onError(new Error("Falta eventoId para listar citas"));
+    return () => {};
+  }
+
   const q = query(
     collection(db, "citas"),
     where("eventoId", "==", eventoId),
-    orderBy("creadoEn", "asc")
+    orderBy("creadoEn", "desc")
   );
+
   return onSnapshot(
     q,
-    (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))),
-    () => cb([])
+    (snap) => {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      cb(rows);
+    },
+    (err) => {
+      console.error("watchCitasByEvento error:", err);
+      onError && onError(err);
+    }
   );
-}
+};
+
 
 /** Suscripción a TODAS las citas del usuario (merge userId/usuarioId) */
 export function watchCitasByUser(uid, cb) {
