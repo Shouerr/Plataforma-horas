@@ -387,7 +387,10 @@ export default function DashboardAdmin() {
                     </div>
                     <div className="flex items-center">
                       <CheckCircle className="w-4 h-4 mr-2" />
-                      {Number(event.hours ?? 0).toFixed(2)} horas
+                      {Number(event.hours ?? 0) % 1 === 0
+                        ? Number(event.hours ?? 0).toFixed(0)
+                        : Number(event.hours ?? 0).toFixed(1)
+                      } horas
                     </div>
                   </div>
 
