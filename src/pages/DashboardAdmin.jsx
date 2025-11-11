@@ -42,7 +42,7 @@ function toDateJS(x) {
   if (typeof x === "string") {
     // YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(x)) return new Date(`${x}T00:00:00`);
-    // dd/mm/yyyy (por si guardaste dateFormatted y deseas fallback)
+    // dd/mm/yyyy
     if (/^\d{2}\/\d{2}\/\d{4}$/.test(x)) {
       const [dd, mm, yyyy] = x.split("/");
       return new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
@@ -97,6 +97,18 @@ function dateStringToTimestamp(yyyy_mm_dd) {
   if (!yyyy_mm_dd) return null;
   const d = new Date(yyyy_mm_dd + "T00:00:00");
   return Timestamp.fromDate(d);
+}
+
+/* nuevo: calcula horas entre HH:mm y HH:mm en pasos de 0.5 */
+function computeHours(startTime, endTime) {
+  const [sh, sm] = parseHM(startTime);
+  const [eh, em] = parseHM(endTime);
+  const startMin = sh * 60 + sm;
+  const endMin = eh * 60 + em;
+  let diff = endMin - startMin;
+  if (!isFinite(diff) || diff < 0) diff = 0; // mismo día; si fin < inicio, 0h
+  const hours = diff / 60;
+  return Math.round(hours * 2) / 2; // 0.5 steps
 }
 
 /* --------------------------------- componente --------------------------------- */
@@ -197,10 +209,11 @@ export default function DashboardAdmin() {
           : (editing?.dateFormatted ?? ""),
         startTime: form.startTime ?? "",
         endTime: form.endTime ?? "",
-        hours: Number(form.hours ?? 0),
         maxSpots: Number(form.maxSpots ?? 0),
       };
 
+      // calcular horas y estado siempre en el backend
+      next.hours = computeHours(next.startTime, next.endTime);
       next.status = deriveStatus({
         ...next,
         registeredStudents: registered,
@@ -489,6 +502,26 @@ function EditEventForm({ initial, onCancel, onSubmit, toInputDate }) {
   const label = "block text-sm font-medium mb-1";
   const handle = (e) => setF((s) => ({ ...s, [e.target.name]: e.target.value }));
 
+  /* auto: recalcular horas y estado cuando cambian horas/fecha/cupos */
+  useEffect(() => {
+    const newHours = computeHours(f.startTime, f.endTime);
+    const nextStatus = deriveStatus({
+      ...initial,
+      ...f,
+      hours: newHours,
+      date: f.date, // acepta yyyy-mm-dd
+      maxSpots: Number(f.maxSpots ?? 0),
+      registeredStudents: Number(initial?.registeredStudents ?? 0),
+    });
+
+    setF((s) => {
+      const needsHours = String(newHours) !== String(s.hours);
+      const needsStatus = nextStatus !== s.status;
+      return needsHours || needsStatus ? { ...s, hours: String(newHours), status: nextStatus } : s;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.startTime, f.endTime, f.date, f.maxSpots]);
+
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit?.(f); }} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
@@ -529,12 +562,29 @@ function EditEventForm({ initial, onCancel, onSubmit, toInputDate }) {
 
         <div>
           <label className={label}>Horas servicio *</label>
-          <input type="number" min="0" step="0.5" className={input} name="hours" value={f.hours} onChange={handle} required />
+          <input
+            type="number"
+            min="0"
+            step="0.5"
+            className={input + " opacity-80 cursor-not-allowed"}
+            name="hours"
+            value={f.hours}
+            readOnly
+            disabled
+            title="Se calcula automáticamente a partir de las horas de inicio y fin"
+          />
         </div>
 
         <div className="col-span-2">
           <label className={label}>Estado (se recalcula automáticamente)</label>
-          <select className={input} name="status" value={f.status} onChange={handle}>
+          <select
+            className={input + " opacity-80 cursor-not-allowed"}
+            name="status"
+            value={f.status}
+            readOnly
+            disabled
+            title="Se calcula automáticamente según la fecha/horas y los cupos"
+          >
             <option value="active">Activo</option>
             <option value="completed">Completado</option>
             <option value="full">Lleno</option>
