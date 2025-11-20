@@ -1,4 +1,3 @@
-// src/components/admin/CreateEventForm.jsx
 import { useMemo, useState } from "react";
 import { Button } from "../ui/button";
 import { DialogClose } from "../ui/dialog";
@@ -22,19 +21,25 @@ export function CreateEventForm({ onSubmit }) {
     endTime: "",
     location: "",
     maxSpots: "",
+    // nuevo: tipo de evento y split para mixto
+    tipoEvento: "servicio", // "servicio" | "cocina" | "mixto"
+    horasServicioMix: "",
+    horasCocinaMix: "",
   });
 
-  // Horas calculadas (número) y visual con coma
+  // Horas calculadas
   const hours = useMemo(
     () => hoursFromTimes(formData.startTime, formData.endTime),
     [formData.startTime, formData.endTime]
   );
   const hoursUI = useMemo(
-    () => Number(hours || 0).toLocaleString("es-CR", { maximumFractionDigits: 1 }),
+    () =>
+      Number(hours || 0).toLocaleString("es-CR", {
+        maximumFractionDigits: 1,
+      }),
     [hours]
   );
 
-  // Estilo base coherente para inputs (claro/oscuro)
   const inputClass =
     "w-full rounded-md border border-input bg-background px-3 py-2 text-sm " +
     "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition " +
@@ -43,14 +48,32 @@ export function CreateEventForm({ onSubmit }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+
+    // si cambiamos el tipo, limpiamos los campos mixtos
+    if (name === "tipoEvento") {
+      setFormData((prev) => ({
+        ...prev,
+        tipoEvento: value,
+        horasServicioMix: "",
+        horasCocinaMix: "",
+      }));
+      return;
+    }
+
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validaciones mínimas requeridas
-    const required = ["title", "date", "startTime", "endTime", "location", "maxSpots"];
+    const required = [
+      "title",
+      "date",
+      "startTime",
+      "endTime",
+      "location",
+      "maxSpots",
+    ];
     const missing = required.filter((k) => !String(formData[k] || "").trim());
     if (missing.length) {
       toast.error("Por favor completa todos los campos requeridos.");
@@ -64,8 +87,37 @@ export function CreateEventForm({ onSubmit }) {
     }
 
     if (!Number.isFinite(hours) || hours <= 0) {
-      toast.error("Revisa las horas: la hora de fin debe ser mayor a la de inicio.");
+      toast.error(
+        "Revisa las horas: la hora de fin debe ser mayor a la de inicio."
+      );
       return;
+    }
+
+    const tipoEvento = formData.tipoEvento || "servicio";
+
+    // --- horas según tipo de evento ---
+    let horasServicioEvento = 0;
+    let horasCocinaEvento = 0;
+    let totalHours = hours;
+
+    if (tipoEvento === "servicio") {
+      horasServicioEvento = hours;
+    } else if (tipoEvento === "cocina") {
+      horasCocinaEvento = hours;
+    } else if (tipoEvento === "mixto") {
+      const hs = parseFloat(formData.horasServicioMix || "0");
+      const hc = parseFloat(formData.horasCocinaMix || "0");
+
+      if (!Number.isFinite(hs) || hs <= 0 || !Number.isFinite(hc) || hc <= 0) {
+        toast.error(
+          "En eventos mixtos debes indicar horas de servicio y de cocina mayores a 0."
+        );
+        return;
+      }
+
+      horasServicioEvento = hs;
+      horasCocinaEvento = hc;
+      totalHours = hs + hc;
     }
 
     // Normaliza fecha a Timestamp y string DD/MM/YYYY
@@ -85,7 +137,12 @@ export function CreateEventForm({ onSubmit }) {
       endTime: formData.endTime,
       location: formData.location,
       maxSpots: maxSpotsNum,
-      hours, // número con punto (p.ej., 2.5) — se guarda en Firestore
+      // nuevo modelado
+      tipoEvento,
+      horasServicioEvento,
+      horasCocinaEvento,
+      // campo hours sigue existiendo como total del evento
+      hours: totalHours,
     });
 
     // Reset visual del formulario
@@ -97,14 +154,21 @@ export function CreateEventForm({ onSubmit }) {
       endTime: "",
       location: "",
       maxSpots: "",
+      tipoEvento: "servicio",
+      horasServicioMix: "",
+      horasCocinaMix: "",
     });
   };
+
+  const { tipoEvento, horasServicioMix, horasCocinaMix } = formData;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
-          <label htmlFor="title" className={labelClass}>Título del Evento *</label>
+          <label htmlFor="title" className={labelClass}>
+            Título del Evento *
+          </label>
           <input
             id="title"
             name="title"
@@ -117,7 +181,9 @@ export function CreateEventForm({ onSubmit }) {
         </div>
 
         <div className="sm:col-span-2">
-          <label htmlFor="description" className={labelClass}>Descripción</label>
+          <label htmlFor="description" className={labelClass}>
+            Descripción
+          </label>
           <textarea
             id="description"
             name="description"
@@ -130,7 +196,9 @@ export function CreateEventForm({ onSubmit }) {
         </div>
 
         <div>
-          <label htmlFor="date" className={labelClass}>Fecha *</label>
+          <label htmlFor="date" className={labelClass}>
+            Fecha *
+          </label>
           <input
             id="date"
             name="date"
@@ -143,7 +211,9 @@ export function CreateEventForm({ onSubmit }) {
         </div>
 
         <div>
-          <label htmlFor="location" className={labelClass}>Ubicación *</label>
+          <label htmlFor="location" className={labelClass}>
+            Ubicación *
+          </label>
           <input
             id="location"
             name="location"
@@ -156,7 +226,9 @@ export function CreateEventForm({ onSubmit }) {
         </div>
 
         <div>
-          <label htmlFor="startTime" className={labelClass}>Hora de Inicio *</label>
+          <label htmlFor="startTime" className={labelClass}>
+            Hora de Inicio *
+          </label>
           <input
             id="startTime"
             name="startTime"
@@ -169,7 +241,9 @@ export function CreateEventForm({ onSubmit }) {
         </div>
 
         <div>
-          <label htmlFor="endTime" className={labelClass}>Hora de Fin *</label>
+          <label htmlFor="endTime" className={labelClass}>
+            Hora de Fin *
+          </label>
           <input
             id="endTime"
             name="endTime"
@@ -181,8 +255,105 @@ export function CreateEventForm({ onSubmit }) {
           />
         </div>
 
+        {/* Tipo de evento */}
+        <div className="sm:col-span-2">
+          <span className={labelClass}>Tipo de evento *</span>
+          <div className="flex flex-wrap gap-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="tipoEvento"
+                value="servicio"
+                checked={tipoEvento === "servicio"}
+                onChange={handleChange}
+              />
+              <span>Servicio</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="tipoEvento"
+                value="cocina"
+                checked={tipoEvento === "cocina"}
+                onChange={handleChange}
+              />
+              <span>Cocina</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="tipoEvento"
+                value="mixto"
+                checked={tipoEvento === "mixto"}
+                onChange={handleChange}
+              />
+              <span>Ambos </span>
+            </label>
+          </div>
+        </div>
+
+        {/* SI NO ES MIXTO: mostramos solo el total arriba */}
+        {tipoEvento !== "mixto" && (
+          <div>
+            <label className={labelClass}>Total horas</label>
+            <input value={hoursUI} className={inputClass} readOnly />
+            <p className="text-xs text-muted-foreground mt-1">
+              Se calcula automáticamente a partir de inicio/fin (1 decimal).
+            </p>
+          </div>
+        )}
+
+        {/* SI ES MIXTO: primero horas por tipo */}
+        {tipoEvento === "mixto" && (
+          <>
+            <div>
+              <label className={labelClass}>
+                Horas de servicio *
+              </label>
+              <input
+                name="horasServicioMix"
+                type="number"
+                min="0.5"
+                step="0.5"
+                className={inputClass}
+                placeholder="Ej: 2.5"
+                value={horasServicioMix}
+                onChange={handleChange}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>
+                Horas de cocina *
+              </label>
+              <input
+                name="horasCocinaMix"
+                type="number"
+                min="0.5"
+                step="0.5"
+                className={inputClass}
+                placeholder="Ej: 1.5"
+                value={horasCocinaMix}
+                onChange={handleChange}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Total horas + Cupos: en mixto quedan juntos abajo */}
+        {tipoEvento === "mixto" && (
+          <div>
+            <label className={labelClass}>Total horas</label>
+            <input value={hoursUI} className={inputClass} readOnly />
+            <p className="text-xs text-muted-foreground mt-1">
+              Se calcula automáticamente a partir de inicio/fin (1 decimal).
+            </p>
+          </div>
+        )}
+
         <div>
-          <label htmlFor="maxSpots" className={labelClass}>Cupos Máximos *</label>
+          <label htmlFor="maxSpots" className={labelClass}>
+           Total Cupos  *
+          </label>
           <input
             id="maxSpots"
             name="maxSpots"
@@ -195,27 +366,19 @@ export function CreateEventForm({ onSubmit }) {
             required
           />
         </div>
-
-        {/* Horas automáticas (read-only) */}
-        <div>
-          <label className={labelClass}>Horas de Servicio (auto)</label>
-          <input
-            value={hoursUI} // se muestra con coma por locale (2,5)
-            className={inputClass}
-            readOnly
-          />
-          <p className="text-xs text-muted-foreground mt-1">
-            Se calcula automáticamente a partir de inicio/fin (1 decimal).
-          </p>
-        </div>
       </div>
 
       <div className="flex justify-end gap-3 pt-4">
         <DialogClose asChild>
-          <Button type="button" variant="outline">Cancelar</Button>
+          <Button type="button" variant="outline">
+            Cancelar
+          </Button>
         </DialogClose>
 
-        <Button type="submit" className="bg-gradient-primary hover:bg-gradient-primary/90">
+        <Button
+          type="submit"
+          className="bg-gradient-primary hover:bg-gradient-primary/90"
+        >
           Crear Evento
         </Button>
       </div>

@@ -12,7 +12,7 @@ import {
   onSnapshot,
   serverTimestamp,
   Timestamp,
-  getDoc
+  getDoc,
 } from "firebase/firestore";
 
 const col = collection(db, "events");
@@ -37,12 +37,15 @@ export const watchAllEvents = (cb) => {
   );
 };
 
+// helper
+const toTs = (v) =>
+  v instanceof Date ? Timestamp.fromDate(v) : v || null;
+
 // =====================
 // 🔹 CREAR EVENTO NUEVO
 // =====================
 export const createEvent = async (data, userId = "admin") => {
-  const toTs = (v) =>
-    v instanceof Date ? Timestamp.fromDate(v) : v || null;
+  const tipoEvento = data.tipoEvento || "servicio";
 
   const payload = {
     title: data.title?.trim() || "",
@@ -51,12 +54,18 @@ export const createEvent = async (data, userId = "admin") => {
     date: toTs(data.date),
     startTime: data.startTime || "",
     endTime: data.endTime || "",
+    // total de horas del evento
     hours: Number(data.hours || 0),
     maxSpots: Number(data.maxSpots || 0),
     registeredStudents: 0,
     status: data.status || "active",
     createdAt: serverTimestamp(),
     createdBy: userId,
+
+    // nuevo: modelado por tipo
+    tipoEvento, // "servicio" | "cocina" | "mixto"
+    horasServicioEvento: Number(data.horasServicioEvento || 0),
+    horasCocinaEvento: Number(data.horasCocinaEvento || 0),
   };
 
   return await addDoc(col, payload);
