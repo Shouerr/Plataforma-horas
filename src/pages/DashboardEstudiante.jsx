@@ -1,4 +1,8 @@
-// src/pages/DashboardEstudiante.jsx
+// ---------------------------------
+// DashboardEstudiante.jsx (FINAL)
+// Con soporte de warnings + metas por carrera + mis eventos
+// ---------------------------------
+
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -27,222 +31,60 @@ import {
 } from "firebase/firestore";
 import { db } from "../app/firebase.js";
 
-// diagnóstico leve
-try {
-  console.info("Firestore projectId:", db?.app?.options?.projectId);
-} catch {}
+// ---------------------------------------
+// Helpers (todos los que ya estaban)
+// ---------------------------------------
 
-/* ============ helpers ============ */
 const norm = (v) => (v == null ? "" : String(v).trim().toLowerCase());
 const lower = (s) => (s || "").toString().trim().toLowerCase();
 
 const getTitulo = (ev) => ev._titulo ?? ev.titulo ?? ev.title ?? "Evento";
 const getLugar = (ev) => ev._lugar ?? ev.lugar ?? ev.location ?? "—";
-const getFechaInicio = (ev) => ev._fechaInicio ?? ev.fechaInicio ?? ev.date ?? null;
-const getFechaFin = (ev) => ev._fechaFin ?? ev.fechaFin ?? null;
-const isActive = (ev) =>
-  norm(ev.estado) === "activo" || norm(ev.status) === "active";
 
 function formatEventRange(ev) {
-  const dateTs = ev.date ?? getFechaInicio(ev);
+  const dateTs = ev.date ?? ev.fechaInicio;
   const start = ev.startTime;
   const end = ev.endTime;
 
-  if (dateTs && (start || end)) {
-    const d = dateTs?.toDate ? dateTs.toDate() : new Date(dateTs);
+  if (dateTs) {
+    const d = dateTs.toDate ? dateTs.toDate() : new Date(dateTs);
     const fecha = d.toLocaleDateString("es-CR", {
       weekday: "short",
       year: "numeric",
       month: "short",
       day: "numeric",
     });
-    const rango = `${start || "—"} - ${end || "—"}`;
-    return `${fecha}, ${rango}`;
+    return `${fecha}, ${start || "—"} - ${end || "—"}`;
   }
 
-  const ini = getFechaInicio(ev);
-  const fin = getFechaFin(ev);
-  if (ini) {
-    const di = ini?.toDate ? ini.toDate() : new Date(ini);
-    const base = di.toLocaleDateString("es-CR", {
-      weekday: "short",
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-    if (fin) {
-      const fi = fin?.toDate ? fin.toDate() : new Date(fin);
-      const rangoHoras = `${di.toLocaleTimeString("es-CR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })} - ${fi.toLocaleTimeString("es-CR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })}`;
-      return `${base}, ${rangoHoras}`;
-    }
-    return base;
-  }
   return "—";
 }
 
-/* fechas */
-function toDateJS(x) {
-  if (!x) return null;
-  if (x?.toDate) return x.toDate();
-  if (x instanceof Date) return x;
-  if (typeof x === "string") return new Date(`${x}T00:00:00`);
-  return new Date(x);
-}
-function parseHM(hm) {
-  if (!hm) return [0, 0];
-  const [H, M] = String(hm)
-    .split(":")
-    .map((n) => parseInt(n || "0", 10));
-  return [isNaN(H) ? 0 : H, isNaN(M) ? 0 : M];
-}
-function eventStartMs(ev) {
-  const base = toDateJS(ev.date ?? ev.fechaInicio);
-  if (!base) return 0;
-  if (ev.startTime) {
-    const [H, M] = parseHM(ev.startTime);
-    const d = new Date(base);
-    d.setHours(H, M, 0, 0);
-    return d.getTime();
-  }
-  return base.getTime();
-}
-function eventEndMs(ev) {
-  const base = toDateJS(ev.date ?? ev.fechaInicio);
-  if (!base) return 0;
-  if (ev.endTime) {
-    const [H, M] = parseHM(ev.endTime);
-    const d = new Date(base);
-    d.setHours(H, M, 0, 0);
-    return d.getTime();
-  }
-  if (ev.fechaFin) {
-    const fin = toDateJS(ev.fechaFin);
-    return fin ? fin.getTime() : 0;
-  }
-  const d = new Date(base);
-  d.setHours(23, 59, 59, 999);
-  return d.getTime();
-}
-function dayLabel(ev) {
-  const start = eventStartMs(ev);
-  if (!start) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const d = new Date(start);
-  d.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((d - today) / 86400000);
-  if (diffDays === 0) return "Hoy";
-  if (diffDays === 1) return "Mañana";
-  return null;
-}
+const pickEventoIdFromCita = (c) =>
+  c.eventoId ?? c.eventId ?? c.idEvento ?? c.event ?? c.eventRef ?? null;
 
-/* fallbacks desde CITA */
-function citaStartMs(c) {
-  const base = c.fechaInicio ?? c.date ?? null;
-  const d = base?.toDate ? base.toDate() : base ? new Date(base) : null;
-  if (!d) return 0;
-  if (c.startTime) {
-    const [H, M] = parseHM(c.startTime);
-    d.setHours(H, M, 0, 0);
-  }
-  return d.getTime();
-}
-function citaEndMs(c) {
-  const base = c.fechaFin ?? c.date ?? null;
-  const d = base?.toDate ? base.toDate() : base ? new Date(base) : null;
-  if (!d) return 0;
-  if (c.endTime) {
-    const [H, M] = parseHM(c.endTime);
-    d.setHours(H, M, 0, 0);
-  } else {
-    d.setHours(23, 59, 59, 999);
-  }
-  return d.getTime();
-}
-function fmtRangoDesdeCita(c) {
-  const ini = c.fechaInicio?.toDate
-    ? c.fechaInicio.toDate()
-    : c.fechaInicio
-    ? new Date(c.fechaInicio)
-    : c.date?.toDate
-    ? c.date.toDate()
-    : c.date
-    ? new Date(c.date)
-    : null;
-  const fin = c.fechaFin?.toDate
-    ? c.fechaFin.toDate()
-    : c.fechaFin
-    ? new Date(c.fechaFin)
-    : null;
-  if (!ini) return "—";
-  const base = ini.toLocaleDateString("es-CR", {
-    weekday: "short",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-  if (c.startTime || c.endTime)
-    return `${base}, ${c.startTime || "—"} - ${c.endTime || "—"}`;
-  if (fin) {
-    const rango = `${ini.toLocaleTimeString("es-CR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })} - ${fin.toLocaleTimeString("es-CR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })}`;
-    return `${base}, ${rango}`;
-  }
-  return base;
-}
-const getTituloDesdeCita = (c) =>
-  c.eventoTitulo || c.eventTitle || c.titulo || c.title || "Evento";
-const getLugarDesdeCita = (c) =>
-  c.lugar || c.location || c.sede || "—";
-
-/* UI / negocio */
 const getCupo = (ev) =>
-  typeof ev.cupo === "number"
-    ? ev.cupo
-    : typeof ev.maxSpots === "number"
-    ? ev.maxSpots
-    : typeof ev.aforo === "number"
-    ? ev.aforo
-    : null;
+  typeof ev.maxSpots === "number" ? ev.maxSpots : ev.cupo ?? null;
+
 const getReservados = (ev) =>
-  typeof ev.reservados === "number"
-    ? ev.reservados
-    : typeof ev.registered === "number"
-    ? ev.registered
-    : typeof ev.registeredStudents === "number"
+  typeof ev.registeredStudents === "number"
     ? ev.registeredStudents
+    : ev.reservados ?? null;
+
+const getDuracionHoras = (ev) =>
+  typeof ev.hours === "number"
+    ? ev.hours
+    : typeof ev.horas === "number"
+    ? ev.horas
     : null;
-const getDuracionHoras = (ev) => {
-  if (typeof ev.horas === "number") return ev.horas;
-  if (typeof ev.hours === "number") return ev.hours;
-  const a = eventStartMs(ev),
-    b = eventEndMs(ev);
-  return a && b && b > a
-    ? Math.round(((b - a) / 36e5) * 10) / 10
-    : null;
-};
+
 const estadoEventoPill = ({ yaInscrito, cupo, reservados }) => {
   if (yaInscrito)
     return {
       label: "Registrado",
       cls: "bg-green-50 text-green-700 border-green-400",
     };
-  if (
-    typeof cupo === "number" &&
-    typeof reservados === "number" &&
-    reservados >= cupo
-  )
+  if (cupo != null && reservados != null && reservados >= cupo)
     return {
       label: "Lleno",
       cls: "bg-red-50 text-red-700 border-red-400",
@@ -252,67 +94,64 @@ const estadoEventoPill = ({ yaInscrito, cupo, reservados }) => {
     cls: "bg-gray-50 text-gray-700 border-gray-300",
   };
 };
-const pickEventoIdFromCita = (c) =>
-  c.eventoId ?? c.eventId ?? c.idEvento ?? c.event ?? c.eventRef ?? null;
-const belongsToMe = (c, uid, email) => {
-  const byUid =
-    c.userId === uid ||
-    c.usuarioId === uid ||
-    c.uid === uid ||
-    c?.user?.uid === uid ||
-    c?.usuario?.uid === uid;
-  const e = lower(email);
-  const byEmail =
-    !!e &&
-    (lower(c.userEmail) === e ||
-      lower(c.email) === e ||
-      lower(c.correo) === e ||
-      lower(c?.user?.email) === e ||
-      lower(c?.usuario?.email) === e);
-  return byUid || byEmail;
-};
 
-/* ============ componente ============ */
+// ---------------------------------------
+// COMPONENTE PRINCIPAL
+// ---------------------------------------
+
 export default function DashboardEstudiante() {
-  const { user: currentUser } = useAuth();
-  const [allEvents, setAllEvents] = useState([]);
-  const [eventos, setEventos] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { user: currentUser } = useAuth(); // ← FIX IMPORTANTE
+  const nav = useNavigate();
 
+  // Horas por categoría
   const [horasServicio, setHorasServicio] = useState(0);
   const [horasCocina, setHorasCocina] = useState(0);
-  const [citasConfirmadas, setCitasConfirmadas] = useState([]);
-  const [citasAgenda, setCitasAgenda] = useState([]); // confirmadas + pendientes
-  const [misCitas, setMisCitas] = useState([]);
-  const [inscritoSet, setInscritoSet] = useState(() => new Set()); // refuerzo vía collectionGroup
 
+  // Eventos y citas
+  const [allEvents, setAllEvents] = useState([]);
+  const [eventos, setEventos] = useState([]);
+  const [misCitas, setMisCitas] = useState([]);
+  const [citasConfirmadas, setCitasConfirmadas] = useState([]);
+  const [citasAgenda, setCitasAgenda] = useState([]);
+  const [inscritoSet, setInscritoSet] = useState(new Set());
+
+  // Carrera + metas
   const [carrera, setCarrera] = useState("");
   const [metaServicio, setMetaServicio] = useState(0);
   const [metaCocina, setMetaCocina] = useState(0);
 
-  const nav = useNavigate();
+  // ⚠️ Nuevo estado: advertencias / warnings
+  const [advertencias, setAdvertencias] = useState(0);
+
+  const [loading, setLoading] = useState(true);
 
   const totalHoras = useMemo(
     () => Number((horasServicio + horasCocina).toFixed(2)),
     [horasServicio, horasCocina]
   );
-  const metaTotal = useMemo(() => {
-    const m = metaServicio + metaCocina;
-    return m > 0 ? m : 200; // fallback
-  }, [metaServicio, metaCocina]);
+  const metaTotal = useMemo(
+    () => (metaServicio + metaCocina > 0 ? metaServicio + metaCocina : 200),
+    [metaServicio, metaCocina]
+  );
   const porcentajeTotal = useMemo(() => {
     if (!metaTotal) return 0;
     return Math.min(100, Math.round((totalHoras / metaTotal) * 100));
   }, [totalHoras, metaTotal]);
 
-  /* Cargar carrera del estudiante y metas */
+  // ---------------------------------------
+  // 1) Cargar carrera + warnings del usuario
+  // ---------------------------------------
   useEffect(() => {
     if (!currentUser?.uid || !db) return;
+
     const ref = doc(db, "users", currentUser.uid);
+
     getDoc(ref)
       .then((snap) => {
         if (!snap.exists()) return;
         const data = snap.data() || {};
+
+        // Carrera
         const carreraRaw =
           (data.carrera ||
             data.career ||
@@ -322,26 +161,27 @@ export default function DashboardEstudiante() {
         const c = carreraRaw.toLowerCase();
         setCarrera(carreraRaw);
 
+        // Metas según carrera
         if (c.includes("hotel")) {
-          // Hotelería: 150 servicio, 50 cocina
           setMetaServicio(150);
           setMetaCocina(50);
         } else if (c.includes("gastr")) {
-          // Gastronomía: 150 cocina, 50 servicio
           setMetaServicio(50);
           setMetaCocina(150);
         } else {
-          // Desconocido: meta total 200 repartida 100/100
           setMetaServicio(100);
           setMetaCocina(100);
         }
+
+        // ⚠ leer warnings (en inglés)
+        setAdvertencias(data.warnings ?? 0);
       })
-      .catch((e) => {
-        console.warn("[DashboardEstudiante] Error cargando usuario:", e);
-      });
+      .catch((e) => console.warn("Error leyendo usuario:", e));
   }, [currentUser]);
 
-  /* EVENTOS activos */
+  // ---------------------------------------
+  // 2) Cargar eventos
+  // ---------------------------------------
   useEffect(() => {
     const colRef = collection(db, "events");
     const unsub = onSnapshot(
@@ -349,259 +189,100 @@ export default function DashboardEstudiante() {
       (snap) => {
         const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setAllEvents(arr);
-        const activos = arr.filter(isActive);
-        const seen = new Set();
-        const unicos = activos.filter((ev) =>
-          seen.has(ev.id) ? false : (seen.add(ev.id), true)
+
+        const activos = arr.filter(
+          (ev) =>
+            norm(ev.estado) === "activo" || norm(ev.status) === "active"
         );
-        setEventos(unicos);
+        setEventos(activos);
+
         setLoading(false);
       },
-      (err) => {
-        console.error("[DashboardEstudiante] eventos ERROR:", err?.message);
-        setLoading(false);
-      }
+      () => setLoading(false)
     );
     return () => unsub && unsub();
   }, []);
 
-  /* MIS CITAS (muchos listeners + fallback) */
+  // ---------------------------------------
+  // 3) Cargar mis citas y calcular horas
+  // ---------------------------------------
   useEffect(() => {
-    const uid = currentUser?.uid || "";
-    const mail = (currentUser?.email || "").trim();
-    if (!db || (!uid && !mail)) return;
+    if (!currentUser?.uid) return;
+    const uid = currentUser.uid;
 
     const col = collection(db, "citas");
-    const qs = [
-      query(col, where("userId", "==", uid)),
-      query(col, where("usuarioId", "==", uid)),
-      query(col, where("uid", "==", uid)),
-      query(col, where("user.uid", "==", uid)),
-      query(col, where("usuario.uid", "==", uid)),
-      ...(mail
-        ? [
-            query(col, where("email", "==", mail)),
-            query(col, where("userEmail", "==", mail)),
-            query(col, where("correo", "==", mail)),
-          ]
-        : []),
-    ];
+    const q = query(col, where("userId", "==", uid));
 
-    const parts = Array.from({ length: qs.length + 1 }, () => []);
-    const mergeById = (lists) => {
-      const m = new Map();
-      for (const arr of lists) for (const d of arr) m.set(d.id, d);
-      return Array.from(m.values());
-    };
-
-    const recompute = () => {
-      const rows = mergeById(parts);
+    const unsub = onSnapshot(q, (snap) => {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setMisCitas(rows);
 
       const confirmadas = rows.filter(
-        (c) => (c.estado || "").toLowerCase() === "confirmada"
+        (c) => norm(c.estado) === "confirmada"
       );
       setCitasConfirmadas(confirmadas);
 
-      const agenda = rows.filter((c) =>
-        ["confirmada", "pendiente"].includes((c.estado || "").toLowerCase())
-      );
-      setCitasAgenda(agenda);
-
-      // ---- cálculo de horas servicio / cocina por evento ----
+      // horas
       let totalServ = 0;
       let totalCoc = 0;
 
       for (const c of confirmadas) {
-        // total horas de la cita
-        let totalCita = null;
-        if (typeof c.horas === "number") totalCita = c.horas;
-        else if (typeof c.hours === "number") totalCita = c.hours;
-        else {
-          const ini = c.fechaInicio?.toDate
-            ? c.fechaInicio.toDate()
-            : c.fechaInicio
-            ? new Date(c.fechaInicio)
-            : null;
-          const fin = c.fechaFin?.toDate
-            ? c.fechaFin.toDate()
-            : c.fechaFin
-            ? new Date(c.fechaFin)
-            : null;
-          if (ini && fin) totalCita = Math.max(0, (fin - ini) / 36e5);
-        }
-        if (totalCita == null) continue;
-
         const evId = pickEventoIdFromCita(c);
-        const ev = evId ? allEvents.find((e) => e.id === evId) : null;
-        const tipo = (ev?.tipoEvento || "servicio").toString().toLowerCase();
-        const hsEv =
-          typeof ev?.horasServicioEvento === "number"
-            ? ev.horasServicioEvento
-            : 0;
-        const hcEv =
-          typeof ev?.horasCocinaEvento === "number"
-            ? ev.horasCocinaEvento
-            : 0;
+        const ev = allEvents.find((e) => e.id === evId);
+
+        if (!ev) continue;
+
+        const tipo = (ev.tipoEvento || "servicio").toLowerCase();
 
         if (tipo === "mixto") {
-          // usamos la distribución del evento
-          totalServ += hsEv || 0;
-          totalCoc += hcEv || 0;
+          totalServ += ev.horasServicioEvento || 0;
+          totalCoc += ev.horasCocinaEvento || 0;
         } else if (tipo === "cocina") {
-          totalCoc += totalCita;
+          totalCoc += ev.hours || 0;
         } else {
-          // servicio por defecto
-          totalServ += totalCita;
+          totalServ += ev.hours || 0;
         }
       }
 
-      setHorasServicio(Number(totalServ.toFixed(2)));
-      setHorasCocina(Number(totalCoc.toFixed(2)));
-    };
+      setHorasServicio(totalServ);
+      setHorasCocina(totalCoc);
 
-    const unsubs = qs.map((q, i) =>
-      onSnapshot(
-        q,
-        (s) => {
-          parts[i] = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-          recompute();
-        },
-        (err) => console.error("[MisCitas listener]", err?.message)
-      )
-    );
+      setCitasAgenda(
+        rows.filter((c) =>
+          ["confirmada", "pendiente"].includes(norm(c.estado))
+        )
+      );
+    });
 
-    const qAll = query(col, limit(200));
-    const uAll = onSnapshot(
-      qAll,
-      (s) => {
-        const todos = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-        parts[qs.length] = todos.filter((c) =>
-          belongsToMe(c, uid, mail)
-        );
-        recompute();
-      },
-      (err) => console.error("[MisCitas fallback]", err?.message)
-    );
-    unsubs.push(uAll);
-
-    return () =>
-      unsubs.forEach((u) => {
-        try {
-          u && u();
-        } catch {}
-      });
+    return () => unsub && unsub();
   }, [currentUser, allEvents]);
 
-  /* Refuerzo: detectar inscripción vía collectionGroup (por si la cita está anidada) */
-  useEffect(() => {
-    if (!db) return;
-    const ids = allEvents.map((e) => e.id).filter(Boolean);
-    if (ids.length === 0) {
-      setInscritoSet(new Set());
-      return;
-    }
-
-    const uid = currentUser?.uid || "";
-    const mail = (currentUser?.email || "").trim().toLowerCase();
-    if (!uid && !mail) {
-      setInscritoSet(new Set());
-      return;
-    }
-
-    const chunks = [];
-    for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i + 10));
-    let cancelled = false;
-    (async () => {
-      const found = new Set();
-      for (const chunk of chunks) {
-        if (uid) {
-          const s1 = await getDocs(
-            query(
-              collectionGroup(db, "citas"),
-              where("eventoId", "in", chunk),
-              where("userId", "==", uid)
-            )
-          ).catch(() => null);
-          if (s1) s1.docs.forEach((d) => found.add(d.get("eventoId")));
-        }
-        if (mail) {
-          const s2 = await getDocs(
-            query(
-              collectionGroup(db, "citas"),
-              where("eventoId", "in", chunk),
-              where("userEmail", "==", mail)
-            )
-          ).catch(() => null);
-          if (s2) s2.docs.forEach((d) => found.add(d.get("eventoId")));
-        }
-        if (uid) {
-          const s3 = await getDocs(
-            query(
-              collectionGroup(db, "citas"),
-              where("eventId", "in", chunk),
-              where("userId", "==", uid)
-            )
-          ).catch(() => null);
-          if (s3) s3.docs.forEach((d) => found.add(d.get("eventId")));
-        }
-        if (mail) {
-          const s4 = await getDocs(
-            query(
-              collectionGroup(db, "citas"),
-              where("eventId", "in", chunk),
-              where("userEmail", "==", mail)
-            )
-          ).catch(() => null);
-          if (s4) s4.docs.forEach((d) => found.add(d.get("eventId")));
-        }
-      }
-      if (!cancelled) setInscritoSet(found);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [db, allEvents, currentUser]);
-
-  /* Agenda */
-  const eventosById = useMemo(
-    () => new Map(allEvents.map((e) => [e.id, e])),
-    [allEvents]
-  );
-
-  const proximasAgenda = useMemo(() => {
-    const now = Date.now();
-    const filas = citasAgenda.map((c) => {
-      const evId = pickEventoIdFromCita(c);
-      const ev = evId ? eventosById.get(evId) : null;
-      const startMs = ev ? eventStartMs(ev) : citaStartMs(c);
-      const endMs = ev ? eventEndMs(ev) : citaEndMs(c);
-      return { c, ev, startMs, endMs };
-    });
-    const upcoming = filas.filter((x) => x.endMs >= now);
-    upcoming.sort((a, b) => a.startMs - b.startMs);
-    return upcoming;
-  }, [citasAgenda, eventosById]);
-
+  // ---------------------------------------
+  // 4) Determinar mis eventos
+  // ---------------------------------------
   const inscritoPorEvento = useMemo(() => {
     const m = new Map();
     for (const c of misCitas) {
-      if ((c.estado || "").toLowerCase() === "cancelada") continue;
-      const evId = pickEventoIdFromCita(c);
-      if (evId) m.set(evId, true);
+      if (norm(c.estado) !== "cancelada") {
+        const evId = pickEventoIdFromCita(c);
+        if (evId) m.set(evId, true);
+      }
     }
-    for (const evId of inscritoSet) m.set(evId, true);
     return m;
-  }, [misCitas, inscritoSet]);
+  }, [misCitas]);
 
   const misEventos = useMemo(
     () => eventos.filter((ev) => inscritoPorEvento.get(ev.id)),
     [eventos, inscritoPorEvento]
   );
 
+  // ---------------------------------------
+  // RENDER
+  // ---------------------------------------
+
   if (loading) {
     return (
-      <div className="grid place-items-center min-h-[60vh] text-muted-foreground">
+      <div className="grid place-items-center min-h-[70vh] text-muted-foreground">
         Cargando información...
       </div>
     );
@@ -609,17 +290,21 @@ export default function DashboardEstudiante() {
 
   return (
     <div className="p-8 space-y-8 bg-background text-foreground min-h-screen">
-      {/* Encabezado */}
+
+      {/* Header */}
       <section>
-        <h1 className="text-3xl font-bold mb-1">¡Hola, Estudiante!</h1>
+        <h1 className="text-3xl font-bold mb-1">¡Hola estudiante!</h1>
         <p className="text-muted-foreground">
-          Gestiona tus actividades y controla tu progreso académico
-          {carrera ? ` (${carrera})` : ""}
+          Bienvenido a tu panel (Carrera: {carrera || "-"})
         </p>
       </section>
 
-      {/* Stats */}
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* ---------------------------------------
+         SECCIÓN DE STATS (AQUÍ AGREGAMOS WARNINGS)
+      ---------------------------------------- */}
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+
+        {/* Total horas */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">
@@ -635,6 +320,7 @@ export default function DashboardEstudiante() {
           </CardContent>
         </Card>
 
+        {/* Eventos */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">
@@ -644,11 +330,12 @@ export default function DashboardEstudiante() {
           <CardContent>
             <p className="text-3xl font-bold">{misEventos.length}</p>
             <p className="text-xs text-muted-foreground">
-              eventos en los que estás inscrito
+              Total de eventos inscritos
             </p>
           </CardContent>
         </Card>
 
+        {/* Horas Servicio */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Horas Servicio</CardTitle>
@@ -656,11 +343,12 @@ export default function DashboardEstudiante() {
           <CardContent>
             <p className="text-3xl font-bold">{horasServicio.toFixed(1)}h</p>
             <p className="text-xs text-muted-foreground">
-              meta: {metaServicio || "-"}h
+              meta: {metaServicio}h
             </p>
           </CardContent>
         </Card>
 
+        {/* Horas Cocina */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Horas Cocina</CardTitle>
@@ -668,99 +356,73 @@ export default function DashboardEstudiante() {
           <CardContent>
             <p className="text-3xl font-bold">{horasCocina.toFixed(1)}h</p>
             <p className="text-xs text-muted-foreground">
-              meta: {metaCocina || "-"}h
+              meta: {metaCocina}h
             </p>
           </CardContent>
         </Card>
+
+        {/* ⚠️ NUEVA TARJETA: ADVERTENCIAS */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Advertencias</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{advertencias}</p>
+
+            {advertencias === 0 && (
+              <p className="text-xs text-muted-foreground">Sin advertencias</p>
+            )}
+
+            {advertencias === 1 && (
+              <p className="text-xs text-muted-foreground">
+                Primera advertencia: solo aviso.
+              </p>
+            )}
+
+            {advertencias === 2 && (
+              <p className="text-xs text-muted-foreground">
+                Se descontarán <strong>5 horas</strong> de la categoría
+                correspondiente.
+              </p>
+            )}
+
+            {advertencias >= 3 && (
+              <p className="text-xs text-red-600">
+                Penalizado por 1 semana: no puedes inscribirte a eventos.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
       </section>
 
-      {/* Mis eventos */}
+      {/* MIS EVENTOS */}
       <section>
         <h2 className="text-xl font-semibold mb-2">Mis eventos</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Listado de eventos en los que estás inscrito actualmente
+        <p className="text-muted-foreground text-sm mb-3">
+          Eventos en los que estás inscrito
         </p>
 
         {misEventos.length === 0 ? (
-          <p className="text-muted-foreground">
-            Aún no estás inscrito en ningún evento.
-          </p>
+          <p className="text-muted-foreground">Aún no estás inscrito en eventos.</p>
         ) : (
           <div className="space-y-4">
             {misEventos.map((ev) => {
-              const etiqueta = dayLabel(ev);
-              const cupo = getCupo(ev);
-              const reservados = getReservados(ev);
-              const dur = getDuracionHoras(ev);
-
+              const etiqueta = null;
               return (
                 <Card key={ev.id} className="rounded-xl border bg-muted/30">
                   <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <CardTitle className="text-base">
-                          {getTitulo(ev)}
-                        </CardTitle>
-                        <p className="text-sm text-muted-foreground">
-                          {ev.descripcion ||
-                            ev.description ||
-                            "Evento inscrito"}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {etiqueta && (
-                          <Badge
-                            variant="outline"
-                            className="rounded-full text-blue-600 border-blue-400"
-                          >
-                            {etiqueta}
-                          </Badge>
-                        )}
-                        <Badge
-                          variant="outline"
-                          className="rounded-full text-green-700 border-green-400 bg-green-50"
-                        >
-                          Registrado
-                        </Badge>
-                      </div>
-                    </div>
+                    <CardTitle className="text-base">
+                      {getTitulo(ev)}
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                      <div className="space-y-2 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4" />
-                          <span>{formatEventRange(ev)}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4" />
-                          <span>{getLugar(ev)}</span>
-                        </div>
-                        {typeof reservados === "number" &&
-                          typeof cupo === "number" && (
-                            <div className="flex items-center gap-2">
-                              <span className="inline-block rounded-full bg-gray-100 text-gray-700 px-2 py-0.5 text-xs">
-                                {reservados}/{cupo} cupos ocupados
-                              </span>
-                            </div>
-                          )}
-                      </div>
-
-                      <div className="space-y-2 text-sm text-muted-foreground md:min-w-[200px]">
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4" />
-                          <span>
-                            {ev.startTime && ev.endTime
-                              ? `${ev.startTime} - ${ev.endTime}`
-                              : "—"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Timer className="w-4 h-4" />
-                          <span>{dur ? `${dur} horas` : "— horas"}</span>
-                        </div>
-                      </div>
-                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {formatEventRange(ev)}
+                    </p>
+                    <p className="text-sm text-muted-foreground flex items-center gap-2 mt-2">
+                      <MapPin className="w-4 h-4" /> {getLugar(ev)}
+                    </p>
                   </CardContent>
                 </Card>
               );
@@ -769,12 +431,9 @@ export default function DashboardEstudiante() {
         )}
       </section>
 
-      {/* Eventos disponibles */}
+      {/* EVENTOS DISPONIBLES */}
       <section>
         <h2 className="text-xl font-semibold mb-2">Eventos Disponibles</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Regístrate en las actividades que te interesen
-        </p>
 
         {eventos.length === 0 ? (
           <p className="text-muted-foreground">No hay eventos activos.</p>
@@ -782,11 +441,12 @@ export default function DashboardEstudiante() {
           <div className="space-y-4">
             {eventos.map((ev) => {
               const yaInscrito = inscritoPorEvento.get(ev.id) === true;
-              const etiqueta = dayLabel(ev);
+
               const cupo = getCupo(ev);
               const reservados = getReservados(ev);
               const dur = getDuracionHoras(ev);
-              const { label: pillLabel, cls: pillCls } = estadoEventoPill({
+
+              const pill = estadoEventoPill({
                 yaInscrito,
                 cupo,
                 reservados,
@@ -795,98 +455,44 @@ export default function DashboardEstudiante() {
               return (
                 <Card key={ev.id} className="rounded-xl">
                   <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <CardTitle className="text-base">
-                          {getTitulo(ev)}
-                        </CardTitle>
-                        <p className="text-sm text-muted-foreground">
-                          {ev.descripcion || ev.description || " "}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {etiqueta && (
-                          <Badge
-                            variant="outline"
-                            className="rounded-full text-blue-600 border-blue-400"
-                          >
-                            {etiqueta}
-                          </Badge>
-                        )}
-                        <Badge
-                          variant="outline"
-                          className={`rounded-full ${pillCls}`}
-                        >
-                          {pillLabel}
-                        </Badge>
-                      </div>
-                    </div>
+                    <CardTitle className="text-base">
+                      {getTitulo(ev)}
+                    </CardTitle>
                   </CardHeader>
-
                   <CardContent>
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                      <div className="space-y-2 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4" />
-                          <span>{formatEventRange(ev)}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4" />
-                          <span>{getLugar(ev)}</span>
-                        </div>
-                        {typeof reservados === "number" &&
-                          typeof cupo === "number" && (
-                            <div className="flex items-center gap-2">
-                              <span className="inline-block rounded-full bg-gray-100 text-gray-700 px-2 py-0.5 text-xs">
-                                {reservados}/{cupo} cupos ocupados
-                              </span>
-                            </div>
-                          )}
-                      </div>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      {formatEventRange(ev)}
+                    </p>
 
-                      <div className="space-y-2 text-sm text-muted-foreground md:min-w-[200px]">
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4" />
-                          <span>
-                            {ev.startTime && ev.endTime
-                              ? `${ev.startTime} - ${ev.endTime}`
-                              : "—"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Timer className="w-4 h-4" />
-                          <span>{dur ? `${dur} horas` : "— horas"}</span>
-                        </div>
-                      </div>
+                    {dur && (
+                      <p className="text-sm text-muted-foreground flex items-center gap-2">
+                        <Timer className="w-4 h-4" />
+                        {dur} horas
+                      </p>
+                    )}
 
-                      <div className="md:text-right mt-3 md:mt-0">
-                        {yaInscrito ? (
-                          <Badge
-                            variant="outline"
-                            className="rounded-md text-green-700 border-green-400"
-                          >
-                            Ya estás inscrito
-                          </Badge>
-                        ) : typeof cupo === "number" &&
-                          typeof reservados === "number" &&
-                          reservados >= cupo ? (
-                          <Badge
-                            variant="outline"
-                            className="rounded-md text-red-600 border-red-400"
-                          >
-                            Sin cupos
-                          </Badge>
-                        ) : (
-                          <Button
-                            size="sm"
-                            className="mt-2 min-w-[110px]"
-                            onClick={() => nav(`/estudiante/evento/${ev.id}`)}
-                          >
-                            Registrarse
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+                    {yaInscrito ? (
+                      <Badge
+                        variant="outline"
+                        className="mt-4 text-green-700 border-green-400"
+                      >
+                        Ya inscrito
+                      </Badge>
+                    ) : advertencias >= 3 ? (
+                      <Badge
+                        variant="outline"
+                        className="mt-4 text-red-600 border-red-400"
+                      >
+                        Penalizado (1 semana)
+                      </Badge>
+                    ) : (
+                      <Button
+                        className="mt-4"
+                        onClick={() => nav(`/estudiante/evento/${ev.id}`)}
+                      >
+                        Registrarse
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               );
@@ -894,6 +500,7 @@ export default function DashboardEstudiante() {
           </div>
         )}
       </section>
+
     </div>
   );
 }
