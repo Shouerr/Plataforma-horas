@@ -7,10 +7,7 @@ import { Badge } from "../components/ui/badge";
 import { useAuth } from "../context/AuthContext";
 
 import { watchEventoById } from "../services/eventosService";
-import {
-  crearCita,
-  getCitaByEventAndUser,
-} from "../services/citasService";
+import { crearCita, getCitaByEventAndUser } from "../services/citasService";
 
 function fmtRange(ev) {
   if (!ev) return "—";
@@ -82,20 +79,29 @@ export default function EventoDetalle() {
     loadingCita ||
     !evento ||
     yaInscrito ||
-    ( (evento.maxSpots ?? evento.cupo ?? 0) <= (evento.registeredStudents ?? evento.reservados ?? 0) );
+    ((evento.maxSpots ?? evento.cupo ?? 0) <=
+      (evento.registeredStudents ?? evento.reservados ?? 0));
 
   async function handleRegistrar() {
     if (!user?.uid || !evento?.id) return;
     // confirmación previa
-    if (!window.confirm("¿Deseas registrarte en este evento?")) return;
+    if (
+      !window.confirm(
+        "¿Deseas registrarte en este evento? Tu inscripción quedará confirmada de inmediato."
+      )
+    )
+      return;
 
     try {
-      await crearCita({ evento, user });   // debe crear cita (pendiente) y hacer +1 seguro
+      // Ahora crearCita deja al estudiante CONFIRMADO
+      await crearCita({ evento, user });
+
       // recargar cita luego del registro
       const c = await getCitaByEventAndUser(evento.id, user.uid);
       setMiCita(c);
-      // (opcional) toast aquí si usas react-hot-toast
-      // toast.success("Inscripción enviada. Queda pendiente de confirmación.");
+
+      // Si luego quieres usar toast:
+      // toast.success("Inscripción confirmada.");
     } catch (e) {
       console.error("Registrar cita:", e);
       alert(e.message || "No se pudo registrar.");
@@ -119,8 +125,10 @@ export default function EventoDetalle() {
   }
 
   const titulo = evento.titulo ?? evento.title ?? "Evento";
-  const lugar  = evento.lugar ?? evento.location ?? "—";
-  const estado = (evento.estado ?? evento.status ?? "active").toString().toLowerCase();
+  const lugar = evento.lugar ?? evento.location ?? "—";
+  const estado = (evento.estado ?? evento.status ?? "active")
+    .toString()
+    .toLowerCase();
   const badge =
     estado === "active" || estado === "activo"
       ? { text: "Activo", cls: "text-green-400 border-green-400" }
@@ -134,13 +142,21 @@ export default function EventoDetalle() {
         <CardHeader className="flex items-start justify-between">
           <div>
             <CardTitle className="text-xl">{titulo}</CardTitle>
-            <p className="text-sm text-muted-foreground">{evento.descripcion ?? evento.description ?? ""}</p>
+            <p className="text-sm text-muted-foreground">
+              {evento.descripcion ?? evento.description ?? ""}
+            </p>
           </div>
-          <Badge variant="outline" className={badge.cls}>{badge.text}</Badge>
+          <Badge variant="outline" className={badge.cls}>
+            {badge.text}
+          </Badge>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p><strong>Fecha:</strong> {fmtRange(evento)}</p>
-          <p><strong>Lugar:</strong> {lugar}</p>
+          <p>
+            <strong>Fecha:</strong> {fmtRange(evento)}
+          </p>
+          <p>
+            <strong>Lugar:</strong> {lugar}
+          </p>
 
           <div className="pt-2">
             <Button

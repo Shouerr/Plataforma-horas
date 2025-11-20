@@ -33,6 +33,7 @@ async function getEventSafe(eventId) {
 }
 
 /* ---------------------- Crear cita (idempotente/segura) --------------------- */
+// AHORA crea la cita YA CONFIRMADA (sin aprobación de admin)
 export async function crearCita({ evento, user }) {
   if (!db) throw new Error("DB no inicializada");
   if (!user?.uid) throw new Error("Usuario no autenticado");
@@ -46,20 +47,22 @@ export async function crearCita({ evento, user }) {
     where("userId", "==", user.uid)
   );
   const snap = await getDocs(q);
-  const dup = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const dup = snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
     .find((c) => c.estado !== "cancelada");
   if (dup) {
     throw new Error("Ya tienes una inscripción para este evento.");
   }
 
-  // 2) Crea
+  // 2) Crea la cita directamente como CONFIRMADA
   const ref = await addDoc(collection(db, "citas"), {
     eventoId,
     userId: user.uid,
     userEmail: user.email ?? null,
     userName: user.displayName ?? null,
-    estado: "pendiente",
+    estado: "confirmada",
     creadoEn: serverTimestamp(),
+    confirmadoEn: serverTimestamp(),
     horas: pickEventHours(evento),
   });
 
@@ -116,7 +119,6 @@ export const watchCitasByEvento = (eventoId, cb, onError) => {
   );
 };
 
-
 /** Suscripción a TODAS las citas del usuario (merge userId/usuarioId) */
 export function watchCitasByUser(uid, cb) {
   if (!uid) return () => {};
@@ -124,7 +126,8 @@ export function watchCitasByUser(uid, cb) {
   const q1 = query(col, where("userId", "==", uid));
   const q2 = query(col, where("usuarioId", "==", uid)); // legacy
 
-  let a = [], b = [];
+  let a = [],
+    b = [];
   const emit = () => {
     const map = new Map();
     [...a, ...b].forEach((x) => map.set(x.id, x));
