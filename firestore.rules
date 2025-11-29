@@ -2,67 +2,115 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function signedIn() { return request.auth != null; }
-    function roleOf(uid) { return get(/databases/$(database)/documents/users/$(uid)).data.role; }
-    function isAdmin()  { return signedIn() && roleOf(request.auth.uid) == "admin"; }
+    /* ============ Helpers ============ */
+    function signedIn() {
+      return request.auth != null;
+    }
 
-    /* ---------------- USERS ---------------- */
+    // Lee role desde /users/{uid} (si no existe, retorna cadena vacía)
+    function roleOf(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.role;
+    }
+
+    // Admin por custom claim o por documento en /users
+    function isAdmin() {
+      return signedIn() && (
+        request.auth.token.admin == true ||
+        roleOf(request.auth.uid) == "admin"
+      );
+    }
+
+    // Normaliza a minúsculas (usa la función nativa lower())
+    function lwr(s) {
+      return (s is string) ? lower(s) : "";
+    }
+
+    /* ============ USERS ============ */
     match /users/{uid} {
+      // ver su propio perfil o admin
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      // crear su propio doc
       allow create: if signedIn() && request.auth.uid == uid;
+      // actualizar/borrar: él mismo o admin
       allow update, delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
     }
 
-    /* ---------------- EVENTS (colección única) ---------------- */
-    match /events/{id} {
-      // Leer: público (o cámbialo a signedIn() si prefieres)
-      allow read: if true;
+    /* ============ EVENTS (colección raíz) ============ */
+    match /events/{eventId} {
+      // lectura: requiere login (cámbialo a 'true' si deseas público)
+      allow read: if signedIn();
 
-      // Admin puede crear/actualizar/eliminar
-      allow create, update, delete: if isAdmin();
+      // admin: control total en creación/eliminación
+      allow create, delete: if isAdmin();
 
-      // (opcional) Estudiante puede tocar solo registeredStudents ±1
-      allow update: if signedIn()
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['registeredStudents'])
-        && request.resource.data.maxSpots == resource.data.maxSpots
-        && request.resource.data.status   == resource.data.status
-        && request.resource.data.date     == resource.data.date
-        && request.resource.data.startTime== resource.data.startTime
-        && request.resource.data.endTime  == resource.data.endTime
-        && request.resource.data.location == resource.data.location
-        && request.resource.data.registeredStudents >= 0
-        && request.resource.data.registeredStudents <= resource.data.maxSpots
-        && (
-          request.resource.data.registeredStudents == resource.data.registeredStudents + 1 ||
-          request.resource.data.registeredStudents == resource.data.registeredStudents - 1
+      // update:
+      //  - admin: cualquier cambio
+      //  - estudiante: SOLO variar registeredStudents +/-1 y dentro de cupo,
+      //    sin tocar campos críticos
+      allow update: if
+        isAdmin()
+        ||
+        (
+          signedIn()
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['registeredStudents'])
+          && request.resource.data.maxSpots  == resource.data.maxSpots
+          && request.resource.data.status    == resource.data.status
+          && request.resource.data.date      == resource.data.date
+          && request.resource.data.startTime == resource.data.startTime
+          && request.resource.data.endTime   == resource.data.endTime
+          && request.resource.data.location  == resource.data.location
+          && request.resource.data.registeredStudents >= 0
+          && request.resource.data.registeredStudents <= resource.data.maxSpots
+          && (
+            request.resource.data.registeredStudents == resource.data.registeredStudents + 1 ||
+            request.resource.data.registeredStudents == resource.data.registeredStudents - 1
+          )
         );
     }
 
-    /* ---------------- CITAS ----------------
-       - Admin: CRUD total (para cascada desde el panel)
-       - Estudiante: CRUD restringido a sus propias citas
-    ------------------------------------------------------------ */
-    match /citas/{citaId} {
+    /* ============ SUBCOLECCIONES BAJO EVENTS ============ 
+       (participants, asistentes, etc.)                       */
+    match /events/{eventId}/{subcoll=**}/{docId} {
       allow read: if signedIn();
-
-      // Admin (necesario para delete en cascada)
-      allow create, update, delete: if isAdmin();
-
-      // Propietario puede crear/leer/actualizar/cancelar su cita
-      allow create: if signedIn()
-        && (request.resource.data.userId == request.auth.uid
-            || request.resource.data.usuarioId == request.auth.uid);
-
-      allow update: if signedIn()
-        && (resource.data.userId == request.auth.uid
-            || resource.data.usuarioId == request.auth.uid);
-
-      allow delete: if signedIn()
-        && (resource.data.userId == request.auth.uid
-            || resource.data.usuarioId == request.auth.uid);
+      allow write: if isAdmin();
     }
 
-    /* ---------------- Bloquear legacy ---------------- */
+    /* ============ CITAS (collection-group) ============ 
+       Aplica a /citas y a cualquier .../{algo}/citas/{id}
+       - Admin: CRUD total
+       - Estudiante: CRUD solo sobre sus propias citas (por UID o Email) */
+    match /{path=**}/citas/{citaId} {
+
+      // lectura: admin o dueño del recurso
+      allow read: if isAdmin() ||
+                  (
+                    signedIn() &&
+                    (
+                      resource.data.userId == request.auth.uid ||
+                      resource.data.usuarioId == request.auth.uid ||
+                      resource.data.uid == request.auth.uid ||
+                      lwr(resource.data.userEmail) == lwr(request.auth.token.email) ||
+                      lwr(resource.data.email) == lwr(request.auth.token.email) ||
+                      lwr(resource.data.correo) == lwr(request.auth.token.email)
+                    )
+                  );
+
+      // crear/actualizar/eliminar: admin o dueño (según los datos que envía)
+      allow create, update, delete: if isAdmin() ||
+                  (
+                    signedIn() &&
+                    (
+                      request.resource.data.userId == request.auth.uid ||
+                      request.resource.data.usuarioId == request.auth.uid ||
+                      request.resource.data.uid == request.auth.uid ||
+                      lwr(request.resource.data.userEmail) == lwr(request.auth.token.email) ||
+                      lwr(request.resource.data.email) == lwr(request.auth.token.email) ||
+                      lwr(request.resource.data.correo) == lwr(request.auth.token.email)
+                    )
+                  );
+    }
+
+    /* ============ Bloquear legacy /eventos ============ */
     match /eventos/{id} {
       allow read, write: if false;
     }

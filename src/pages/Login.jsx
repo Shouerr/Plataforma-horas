@@ -60,7 +60,7 @@ export default function Login() {
         <div className="hdr">
           <LogoIcon />
           <div>
-            <div className="tiny">EGH Sistema</div>
+            <div className="tiny">Gestión de eventos y horas estudiantiles</div>
             <h1>{mode === "login" ? "Iniciar Sesión" : "Crear Cuenta"}</h1>
             <p className="lead">
               {mode === "login"
@@ -105,7 +105,7 @@ export default function Login() {
           <input
             className="inp"
             type="email"
-            placeholder="tu.correo@estudiante.egh.edu"
+            placeholder="correo.institucional@ulatina.net/cr"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required

@@ -67,6 +67,22 @@ const getDuracionHoras = (ev) =>
     ? ev.horas
     : null;
 
+// inicio del evento (para ordenar)
+function getEventStartMs(ev) {
+  const base = ev.date ?? ev.fechaInicio;
+  if (!base) return Number.MAX_SAFE_INTEGER;
+
+  const d = base.toDate ? base.toDate() : new Date(base);
+  const startTime = ev.startTime || "00:00";
+
+  const [H, M] = String(startTime)
+    .split(":")
+    .map((n) => parseInt(n || "0", 10));
+
+  d.setHours(isNaN(H) ? 0 : H, isNaN(M) ? 0 : M, 0, 0);
+  return d.getTime();
+}
+
 function getEventEndMs(ev) {
   const base = ev.date ?? ev.fechaInicio;
   if (!base) return 0;
@@ -179,8 +195,9 @@ export default function DashboardEstudiante() {
 
       setAllEvents(decorated);
 
-      const activos = decorated.filter((ev) => ev._status === "active");
-      setEventos(activos);
+      // mostrar todos menos los completados
+      const visibles = decorated.filter((ev) => ev._status !== "completed");
+      setEventos(visibles);
 
       setLoading(false);
     });
@@ -249,6 +266,13 @@ export default function DashboardEstudiante() {
     [eventos, inscritoPorEvento]
   );
 
+  // eventos ordenados por fecha/hora (para la sección de disponibles)
+  const eventosOrdenados = useMemo(() => {
+    const copia = [...eventos];
+    copia.sort((a, b) => getEventStartMs(a) - getEventStartMs(b));
+    return copia;
+  }, [eventos]);
+
   /* ------- totales para tarjetas ------- */
   const totalHorasNum = horasServicio + horasCocina;
   const totalHoras = totalHorasNum.toFixed(1);
@@ -286,13 +310,13 @@ export default function DashboardEstudiante() {
         {/* Tarjetas stats */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {/* Horas totales */}
-          <Card>
+          <Card className="bg-gradient-primary text-primary-foreground border-0 shadow-elevation-medium">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Horas Completadas</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold">{totalHoras}h</p>
-              <p className="text-xs text-muted-foreground mb-2">
+              <p className="text-xs opacity-90">
                 de {metaTotal} horas requeridas
               </p>
               <Progress value={pctTotal} className="h-2" />
@@ -380,7 +404,7 @@ export default function DashboardEstudiante() {
           </Card>
         </section>
 
-        {/* ---------------- MIS EVENTOS (estilo fila + Confirmado) ---------------- */}
+        {/* ---------------- MIS EVENTOS ---------------- */}
         <section>
           <h2 className="text-xl font-semibold mb-2">Mis eventos</h2>
           <p className="text-muted-foreground text-sm mb-3">
@@ -400,7 +424,7 @@ export default function DashboardEstudiante() {
                   const d = baseDate.toDate
                     ? baseDate.toDate()
                     : new Date(baseDate);
-                  fechaSolo = d.toISOString().slice(0, 10); // YYYY-MM-DD
+                  fechaSolo = d.toISOString().slice(0, 10);
                 }
                 const rangoHora =
                   ev.startTime && ev.endTime
@@ -423,17 +447,15 @@ export default function DashboardEstudiante() {
                         <p className="text-sm text-muted-foreground">
                           {getLugar(ev)}
                         </p>
-                        
-                        
-                        <Button
-                        variant="outline"
-                        size="xss"
-                        onClick={() => nav(`/estudiante/evento/${ev.id}`)}
-                        className="mt-2 w-fit border-[2px] rounded-md px-3 py-0.5"
-                      >
-                        Ver detalles
-                      </Button>
 
+                        <Button
+                          variant="outline"
+                          size="xss"
+                          onClick={() => nav(`/estudiante/evento/${ev.id}`)}
+                          className="mt-2 w-fit border-[2px] rounded-md px-3 py-0.5"
+                        >
+                          Ver detalles
+                        </Button>
                       </div>
 
                       <Badge
@@ -450,18 +472,18 @@ export default function DashboardEstudiante() {
           )}
         </section>
 
-        {/* ---------------- EVENTOS DISPONIBLES (Lovable) ---------------- */}
+        {/* ---------------- EVENTOS DISPONIBLES ---------------- */}
         <section>
           <h2 className="text-xl font-semibold mb-2">Eventos Disponibles</h2>
           <p className="text-muted-foreground text-sm mb-3">
             Regístrate en las actividades que te interesen
           </p>
 
-          {eventos.length === 0 ? (
+          {eventosOrdenados.length === 0 ? (
             <p className="text-muted-foreground">No hay eventos activos.</p>
           ) : (
             <div className="space-y-4">
-              {eventos.map((ev) => {
+              {eventosOrdenados.map((ev) => {
                 const yaInscrito = inscritoPorEvento.get(ev.id) === true;
 
                 const dur = getDuracionHoras(ev);
@@ -512,15 +534,13 @@ export default function DashboardEstudiante() {
                         </div>
 
                         <Badge
-                          variant={
-                            eventoLleno ? "destructive" : "outline"
-                          }
+                          variant="outline"
                           className={
                             yaInscrito
-                              ? "bg-green-50 text-green-700 border-green-400"
+                              ? "bg-green-200 text-green-700 border-green-400"
                               : eventoLleno
-                              ? ""
-                              : ""
+                              ? "bg-red-600 text-red-100 border-red-700"
+                              : "bg-blue-100 text-blue-700 border-blue-400"
                           }
                         >
                           {badgeLabel}

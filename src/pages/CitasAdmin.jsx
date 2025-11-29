@@ -144,12 +144,12 @@ export default function CitasAdmin() {
             Confirmadas: {counts.confirmadas}
           </Badge>
 
-          <Badge
+          {/* <Badge
             variant="outline"
             className="bg-yellow-50 text-yellow-700 border-yellow-400 rounded-full"
           >
             Pendientes: {counts.pendientes}
-          </Badge>
+          </Badge> */}
 
           <Badge
             variant="outline"

@@ -8,8 +8,14 @@ function hoursFromTimes(startTime, endTime) {
   if (!startTime || !endTime) return 0;
   const [h1, m1] = String(startTime).split(":").map(Number);
   const [h2, m2] = String(endTime).split(":").map(Number);
-  const diff = Math.max(0, (h2 + (m2 || 0) / 60) - (h1 + (m1 || 0) / 60));
-  return Math.round(diff * 10) / 10; // 1 decimal
+
+  const diff = Math.max(
+    0,
+    (h2 + (m2 || 0) / 60) - (h1 + (m1 || 0) / 60)
+  );
+
+  // 1 decimal (ej: 3.5h)
+  return Math.round(diff * 10) / 10;
 }
 
 export function CreateEventForm({ onSubmit }) {
@@ -21,17 +27,18 @@ export function CreateEventForm({ onSubmit }) {
     endTime: "",
     location: "",
     maxSpots: "",
-    // nuevo: tipo de evento y split para mixto
+    // tipo de evento y horas sólo para el caso mixto
     tipoEvento: "servicio", // "servicio" | "cocina" | "mixto"
     horasServicioMix: "",
     horasCocinaMix: "",
   });
 
-  // Horas calculadas
+  // Horas totales calculadas a partir de inicio/fin
   const hours = useMemo(
     () => hoursFromTimes(formData.startTime, formData.endTime),
     [formData.startTime, formData.endTime]
   );
+
   const hoursUI = useMemo(
     () =>
       Number(hours || 0).toLocaleString("es-CR", {
@@ -74,15 +81,22 @@ export function CreateEventForm({ onSubmit }) {
       "location",
       "maxSpots",
     ];
-    const missing = required.filter((k) => !String(formData[k] || "").trim());
+    const missing = required.filter(
+      (k) => !String(formData[k] || "").trim()
+    );
+
     if (missing.length) {
-      toast.error("Por favor completa todos los campos requeridos.");
+      toast.error(
+        "Por favor completa todos los campos requeridos."
+      );
       return;
     }
 
     const maxSpotsNum = parseInt(formData.maxSpots, 10);
     if (Number.isNaN(maxSpotsNum) || maxSpotsNum <= 0) {
-      toast.error("Cupos máximos debe ser un número mayor a 0.");
+      toast.error(
+        "Cupos máximos debe ser un número mayor a 0."
+      );
       return;
     }
 
@@ -101,14 +115,24 @@ export function CreateEventForm({ onSubmit }) {
     let totalHours = hours;
 
     if (tipoEvento === "servicio") {
+      // todo a servicio
       horasServicioEvento = hours;
+      horasCocinaEvento = 0;
     } else if (tipoEvento === "cocina") {
+      // todo a cocina
+      horasServicioEvento = 0;
       horasCocinaEvento = hours;
     } else if (tipoEvento === "mixto") {
+      // el admin reparte manualmente
       const hs = parseFloat(formData.horasServicioMix || "0");
       const hc = parseFloat(formData.horasCocinaMix || "0");
 
-      if (!Number.isFinite(hs) || hs <= 0 || !Number.isFinite(hc) || hc <= 0) {
+      if (
+        !Number.isFinite(hs) ||
+        hs <= 0 ||
+        !Number.isFinite(hc) ||
+        hc <= 0
+      ) {
         toast.error(
           "En eventos mixtos debes indicar horas de servicio y de cocina mayores a 0."
         );
@@ -118,6 +142,10 @@ export function CreateEventForm({ onSubmit }) {
       horasServicioEvento = hs;
       horasCocinaEvento = hc;
       totalHours = hs + hc;
+
+      // opcional: si querés que la suma coincida con el horario
+      // podrías validar aquí y advertir si difiere de `hours`
+      // if (Math.abs(totalHours - hours) > 0.1) { ... }
     }
 
     // Normaliza fecha a Timestamp y string DD/MM/YYYY
@@ -137,11 +165,11 @@ export function CreateEventForm({ onSubmit }) {
       endTime: formData.endTime,
       location: formData.location,
       maxSpots: maxSpotsNum,
-      // nuevo modelado
+      // modelado final que se guarda en Firestore
       tipoEvento,
       horasServicioEvento,
       horasCocinaEvento,
-      // campo hours sigue existiendo como total del evento
+      // hours = total del evento
       hours: totalHours,
     });
 
@@ -160,7 +188,8 @@ export function CreateEventForm({ onSubmit }) {
     });
   };
 
-  const { tipoEvento, horasServicioMix, horasCocinaMix } = formData;
+  const { tipoEvento, horasServicioMix, horasCocinaMix } =
+    formData;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -181,7 +210,10 @@ export function CreateEventForm({ onSubmit }) {
         </div>
 
         <div className="sm:col-span-2">
-          <label htmlFor="description" className={labelClass}>
+          <label
+            htmlFor="description"
+            className={labelClass}
+          >
             Descripción
           </label>
           <textarea
@@ -211,7 +243,10 @@ export function CreateEventForm({ onSubmit }) {
         </div>
 
         <div>
-          <label htmlFor="location" className={labelClass}>
+          <label
+            htmlFor="location"
+            className={labelClass}
+          >
             Ubicación *
           </label>
           <input
@@ -226,7 +261,10 @@ export function CreateEventForm({ onSubmit }) {
         </div>
 
         <div>
-          <label htmlFor="startTime" className={labelClass}>
+          <label
+            htmlFor="startTime"
+            className={labelClass}
+          >
             Hora de Inicio *
           </label>
           <input
@@ -241,7 +279,10 @@ export function CreateEventForm({ onSubmit }) {
         </div>
 
         <div>
-          <label htmlFor="endTime" className={labelClass}>
+          <label
+            htmlFor="endTime"
+            className={labelClass}
+          >
             Hora de Fin *
           </label>
           <input
@@ -287,23 +328,51 @@ export function CreateEventForm({ onSubmit }) {
                 checked={tipoEvento === "mixto"}
                 onChange={handleChange}
               />
-              <span>Ambos </span>
+              <span>Mixto</span>
             </label>
           </div>
         </div>
 
-        {/* SI NO ES MIXTO: mostramos solo el total arriba */}
+        {/* No mixto: total horas + cupos en layout normal */}
         {tipoEvento !== "mixto" && (
-          <div>
-            <label className={labelClass}>Total horas</label>
-            <input value={hoursUI} className={inputClass} readOnly />
-            <p className="text-xs text-muted-foreground mt-1">
-              Se calcula automáticamente a partir de inicio/fin (1 decimal).
-            </p>
-          </div>
+          <>
+            <div>
+              <label className={labelClass}>
+                Total horas
+              </label>
+              <input
+                value={hoursUI}
+                className={inputClass}
+                readOnly
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Se calcula automáticamente a partir de
+                inicio/fin (1 decimal).
+              </p>
+            </div>
+            <div>
+              <label
+                htmlFor="maxSpots"
+                className={labelClass}
+              >
+                Total Cupos *
+              </label>
+              <input
+                id="maxSpots"
+                name="maxSpots"
+                type="number"
+                min="1"
+                className={inputClass}
+                placeholder="Ej: 20"
+                value={formData.maxSpots}
+                onChange={handleChange}
+                required
+              />
+            </div>
+          </>
         )}
 
-        {/* SI ES MIXTO: primero horas por tipo */}
+        {/* Mixto: primero horas por tipo */}
         {tipoEvento === "mixto" && (
           <>
             <div>
@@ -336,36 +405,43 @@ export function CreateEventForm({ onSubmit }) {
                 onChange={handleChange}
               />
             </div>
+
+            <div>
+              <label className={labelClass}>
+                Total horas
+              </label>
+              <input
+                value={hoursUI}
+                className={inputClass}
+                readOnly
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Se calcula automáticamente a partir de
+                inicio/fin (1 decimal).
+              </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="maxSpots"
+                className={labelClass}
+              >
+                Total Cupos *
+              </label>
+              <input
+                id="maxSpots"
+                name="maxSpots"
+                type="number"
+                min="1"
+                className={inputClass}
+                placeholder="Ej: 20"
+                value={formData.maxSpots}
+                onChange={handleChange}
+                required
+              />
+            </div>
           </>
         )}
-
-        {/* Total horas + Cupos: en mixto quedan juntos abajo */}
-        {tipoEvento === "mixto" && (
-          <div>
-            <label className={labelClass}>Total horas</label>
-            <input value={hoursUI} className={inputClass} readOnly />
-            <p className="text-xs text-muted-foreground mt-1">
-              Se calcula automáticamente a partir de inicio/fin (1 decimal).
-            </p>
-          </div>
-        )}
-
-        <div>
-          <label htmlFor="maxSpots" className={labelClass}>
-           Total Cupos  *
-          </label>
-          <input
-            id="maxSpots"
-            name="maxSpots"
-            type="number"
-            min="1"
-            className={inputClass}
-            placeholder="Ej: 20"
-            value={formData.maxSpots}
-            onChange={handleChange}
-            required
-          />
-        </div>
       </div>
 
       <div className="flex justify-end gap-3 pt-4">

@@ -1,6 +1,6 @@
 // src/pages/EventoDetalle.jsx
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -28,8 +28,35 @@ function fmtRange(ev) {
   return "—";
 }
 
+// 🔹 NUEVO: descripción amigable de horas/categoría
+function getHorasDescripcion(ev) {
+  if (!ev) return "";
+
+  const tipo = (ev.tipoEvento || "").toLowerCase();
+  const total = ev.hours ?? ev.horas ?? 0;
+  const serv = ev.horasServicioEvento ?? 0;
+  const coc = ev.horasCocinaEvento ?? 0;
+
+  // si no hay nada configurado, no mostramos nada
+  if (!total && !serv && !coc) return "";
+
+  if (tipo === "mixto") {
+    return `Horas mixtas: servicio ${serv}h, cocina ${coc}h`;
+  }
+
+  if (tipo === "cocina") {
+    const valor = coc || total;
+    return `Horas: cocina ${valor}h`;
+  }
+
+  // servicio o valor por defecto
+  const valor = serv || total;
+  return `Horas: servicio ${valor}h`;
+}
+
 export default function EventoDetalle() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
 
   const [evento, setEvento] = useState(null);
@@ -84,7 +111,6 @@ export default function EventoDetalle() {
 
   async function handleRegistrar() {
     if (!user?.uid || !evento?.id) return;
-    // confirmación previa
     if (
       !window.confirm(
         "¿Deseas registrarte en este evento? Tu inscripción quedará confirmada de inmediato."
@@ -93,15 +119,9 @@ export default function EventoDetalle() {
       return;
 
     try {
-      // Ahora crearCita deja al estudiante CONFIRMADO
       await crearCita({ evento, user });
-
-      // recargar cita luego del registro
       const c = await getCitaByEventAndUser(evento.id, user.uid);
       setMiCita(c);
-
-      // Si luego quieres usar toast:
-      // toast.success("Inscripción confirmada.");
     } catch (e) {
       console.error("Registrar cita:", e);
       alert(e.message || "No se pudo registrar.");
@@ -136,8 +156,32 @@ export default function EventoDetalle() {
       ? { text: "Completado", cls: "text-yellow-500 border-yellow-500" }
       : { text: "Lleno", cls: "text-red-500 border-red-500" };
 
+  const horasDescripcion = getHorasDescripcion(evento);
+
   return (
     <div className="p-8 space-y-6">
+      {/* Flecha de volver al panel estudiante */}
+      <div
+        onClick={() => navigate("/estudiante")}
+        className="flex items-center gap-2 text-primary cursor-pointer mb-4 w-fit"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M15 19l-7-7 7-7"
+          />
+        </svg>
+        <span className="font-medium">Volver</span>
+      </div>
+
       <Card>
         <CardHeader className="flex items-start justify-between">
           <div>
@@ -154,9 +198,12 @@ export default function EventoDetalle() {
           <p>
             <strong>Fecha:</strong> {fmtRange(evento)}
           </p>
+
           <p>
             <strong>Lugar:</strong> {lugar}
           </p>
+
+          {horasDescripcion && <p>{horasDescripcion}</p>}
 
           <div className="pt-2">
             <Button
