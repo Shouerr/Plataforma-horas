@@ -64,6 +64,12 @@ export async function crearCita({ evento, user }) {
     creadoEn: serverTimestamp(),
     confirmadoEn: serverTimestamp(),
     horas: pickEventHours(evento),
+
+    // 👇 NUEVO: campos para asistencia por QR
+    asistenciaEntradaAt: null,
+    asistenciaSalidaAt: null,
+    asistenciaCompleta: false,
+    asistenciaEstado: "ninguna", // opcional (ninguna | entrada | completa)
   });
 
   // 3) Sube contador de inscritos del evento (si existe ese campo)
@@ -179,4 +185,52 @@ export async function deleteCitasByEvento(eventoId) {
 export async function eventoExiste(eventoId) {
   const ev = await getEventSafe(eventoId);
   return !!ev;
+}
+
+/* ------------------ NUEVO: registrar asistencia desde QR ------------------- */
+/**
+ * Lógica de asistencia por QR:
+ *  - Primer escaneo => marca ENTRADA
+ *  - Segundo escaneo => marca SALIDA y asistenciaCompleta = true
+ *  - Tercero+ => lanza error ("ya registrada")
+ */
+export async function registrarAsistenciaQR({ eventId, userId }) {
+  if (!eventId || !userId) {
+    throw new Error("Faltan datos de evento o usuario.");
+  }
+
+  const cita = await getCitaByEventAndUser(eventId, userId);
+  if (!cita) {
+    throw new Error("No tienes inscripción en este evento.");
+  }
+
+  if (cita.estado === "cancelada") {
+    throw new Error("Tu inscripción para este evento está cancelada.");
+  }
+
+  const ref = doc(db, "citas", cita.id);
+
+  // 1) No tiene entrada todavía => registramos ENTRADA
+  if (!cita.asistenciaEntradaAt) {
+    await updateDoc(ref, {
+      asistenciaEntradaAt: serverTimestamp(),
+      asistenciaEstado: "entrada",
+    });
+
+    return { step: "entrada", citaId: cita.id };
+  }
+
+  // 2) Tiene entrada pero no salida => registramos SALIDA y completamos
+  if (!cita.asistenciaSalidaAt) {
+    await updateDoc(ref, {
+      asistenciaSalidaAt: serverTimestamp(),
+      asistenciaCompleta: true,
+      asistenciaEstado: "completa",
+    });
+
+    return { step: "salida", citaId: cita.id };
+  }
+
+  // 3) Ya tenía entrada y salida
+  throw new Error("Ya registraste entrada y salida para este evento.");
 }

@@ -14,13 +14,7 @@ import { Progress } from "../components/ui/progress.jsx";
 import { Badge } from "../components/ui/badge.jsx";
 import { Button } from "../components/ui/button.jsx";
 
-import {
-  MapPin,
-  Calendar,
-  Clock,
-  Users,
-  BookOpen,
-} from "lucide-react";
+import { MapPin, Calendar, Clock, Users, BookOpen } from "lucide-react";
 
 import {
   collection,
@@ -223,6 +217,10 @@ export default function DashboardEstudiante() {
       for (const c of citas) {
         if (norm(c.estado) !== "confirmada") continue;
 
+        // ⚠️ NUEVO: solo contar horas si la asistencia está marcada como completa
+        // (entrada y salida escaneadas)
+        if (!c.asistenciaCompleta) continue;
+
         const evId = pickEventoIdFromCita(c);
         const ev = allEvents.find((e) => e.id === evId);
         if (!ev) continue;
@@ -312,7 +310,9 @@ export default function DashboardEstudiante() {
           {/* Horas totales */}
           <Card className="bg-gradient-primary text-primary-foreground border-0 shadow-elevation-medium">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Horas Completadas</CardTitle>
+              <CardTitle className="text-sm">
+                Horas Completadas
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold">{totalHoras}h</p>
@@ -329,7 +329,9 @@ export default function DashboardEstudiante() {
               <CardTitle className="text-sm">Horas Servicio</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">{horasServicio.toFixed(1)}h</p>
+              <p className="text-3xl font-bold">
+                {horasServicio.toFixed(1)}h
+              </p>
               <p className="text-xs text-muted-foreground mb-2">
                 meta: {metaServicio}h
               </p>
@@ -343,7 +345,9 @@ export default function DashboardEstudiante() {
               <CardTitle className="text-sm">Horas Cocina</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">{horasCocina.toFixed(1)}h</p>
+              <p className="text-3xl font-bold">
+                {horasCocina.toFixed(1)}h
+              </p>
               <p className="text-xs text-muted-foreground mb-2">
                 meta: {metaCocina}h
               </p>
@@ -354,7 +358,9 @@ export default function DashboardEstudiante() {
           {/* Eventos registrados */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Eventos Registrados</CardTitle>
+              <CardTitle className="text-sm">
+                Eventos Registrados
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold text-green-600">

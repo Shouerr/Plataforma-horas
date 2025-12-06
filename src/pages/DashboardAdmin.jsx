@@ -154,8 +154,7 @@ export default function DashboardAdmin() {
       const decorated = list
         .map((e) => ({ ...e, _displayStatus: deriveStatus(e) }))
         .sort(
-          (a, b) =>
-            (a?.date?.toMillis?.() ?? 0) - (b?.date?.toMillis?.() ?? 0)
+          (a, b) => (a?.date?.toMillis?.() ?? 0) - (b?.date?.toMillis?.() ?? 0)
         );
       setEvents(decorated);
       setLoading(false);
@@ -313,14 +312,13 @@ export default function DashboardAdmin() {
     }
   }
 
-  const activeCount = events.filter((e) => e._displayStatus === "active")
-    .length;
+  const activeCount = events.filter((e) => e._displayStatus === "active").length;
   const completedCount = events.filter(
     (e) => e._displayStatus === "completed"
   ).length;
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Encabezado */}
       <div className="flex items-center justify-between">
         <div>
@@ -382,9 +380,7 @@ export default function DashboardAdmin() {
             <div className="text-2xl font-bold text-green-500">
               {activeCount}
             </div>
-            <p className="text-xs text-muted-foreground">
-              próximos eventos
-            </p>
+            <p className="text-xs text-muted-foreground">próximos eventos</p>
           </CardContent>
         </Card>
 
@@ -425,9 +421,7 @@ export default function DashboardAdmin() {
       <Card>
         <CardHeader>
           <CardTitle>Gestión de Eventos</CardTitle>
-          <CardDescription>
-            Administra, edita y genera códigos QR
-          </CardDescription>
+          <CardDescription>Administra, edita y genera códigos QR</CardDescription>
         </CardHeader>
 
         <CardContent>
@@ -524,7 +518,7 @@ export default function DashboardAdmin() {
                       </div>
                     </div>
 
-                    <div className="flex justify-between items-center mt-3">
+                    <div className="flex flex-wrap gap-2 justify-between items-center mt-3">
                       <div className="flex items-center gap-2">
                         <p className="text-sm">
                           <strong className="text-foreground">
@@ -546,7 +540,7 @@ export default function DashboardAdmin() {
                         </Link>
                       </div>
 
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <QRCodeDialog
                           eventId={event.id}
                           eventTitle={event.title}
@@ -869,9 +863,7 @@ function EditEventForm({ initial, onCancel, onSubmit, toInputDate }) {
         </div>
 
         <div>
-          <label className={label}>
-            Horas totales (según horario) *
-          </label>
+          <label className={label}>Horas totales (según horario) *</label>
           <input
             type="number"
             min="0"

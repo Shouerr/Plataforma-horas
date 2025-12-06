@@ -1,3 +1,4 @@
+// src/routes/router.jsx
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 // Páginas públicas
@@ -11,11 +12,14 @@ import MisCitas from "../pages/MisCitas";
 
 // Admin
 import DashboardAdmin from "../pages/DashboardAdmin";
-// import EventosAdmin from "../pages/EventosAdmin";  // ⬅️ ya no lo necesitamos
+// import EventosAdmin from "../pages/EventosAdmin";
 import CitasAdmin from "../pages/CitasAdmin";
 
 // Rutas protegidas (inyectan Header automáticamente)
 import ProtectedRoute from "./ProtectedRoute";
+
+// 🆕 Escáner QR
+import ScannerQR from "../pages/ScannerQR";
 
 const router = createBrowserRouter([
   // Público
@@ -48,6 +52,12 @@ const router = createBrowserRouter([
     ),
   },
 
+  // 🆕 Ruta del escáner SIN ProtectedRoute para que no redirija a /login
+  {
+    path: "/scanner",
+    element: <ScannerQR />,
+  },
+
   // ===== Admin =====
   {
     path: "/admin",
@@ -57,15 +67,10 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
-
-  // (Opcional) backward-compat: si alguien entra a /admin/eventos,
-  // lo redirigimos al único dashboard admin.
   {
     path: "/admin/eventos",
     element: <Navigate to="/admin" replace />,
   },
-
-  // Participantes de un evento (desde el botón “Participantes”)
   {
     path: "/admin/eventos/:eventoId/citas",
     element: (
