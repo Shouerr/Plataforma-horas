@@ -137,9 +137,15 @@ export default function DashboardEstudiante() {
   const [metaCocina, setMetaCocina] = useState(0);
 
   const [advertencias, setAdvertencias] = useState(0);
+
+  // NUEVO: penalizaciones por horas y ventana de bloqueo
+  const [penaltyServicio, setPenaltyServicio] = useState(0);
+  const [penaltyCocina, setPenaltyCocina] = useState(0);
+  const [penaltyUntil, setPenaltyUntil] = useState(null);
+
   const [loading, setLoading] = useState(true);
 
-  /* ------- usuario (carrera, metas, advertencias) ------- */
+  /* ------- usuario (carrera, metas, advertencias, penalizaciones) ------- */
   useEffect(() => {
     if (!currentUser?.uid) return;
 
@@ -170,6 +176,17 @@ export default function DashboardEstudiante() {
       }
 
       setAdvertencias(data.warnings ?? 0);
+      setPenaltyServicio(data.penaltyServicio ?? 0);
+      setPenaltyCocina(data.penaltyCocina ?? 0);
+
+      const rawPenUntil = data.penaltyUntil ?? null;
+      if (rawPenUntil?.toDate) {
+        setPenaltyUntil(rawPenUntil.toDate());
+      } else if (rawPenUntil) {
+        setPenaltyUntil(new Date(rawPenUntil));
+      } else {
+        setPenaltyUntil(null);
+      }
     });
   }, [currentUser]);
 
@@ -217,8 +234,7 @@ export default function DashboardEstudiante() {
       for (const c of citas) {
         if (norm(c.estado) !== "confirmada") continue;
 
-        // ⚠️ NUEVO: solo contar horas si la asistencia está marcada como completa
-        // (entrada y salida escaneadas)
+        // ⚠️ solo contar horas si la asistencia está completa
         if (!c.asistenciaCompleta) continue;
 
         const evId = pickEventoIdFromCita(c);
@@ -271,20 +287,36 @@ export default function DashboardEstudiante() {
     return copia;
   }, [eventos]);
 
-  /* ------- totales para tarjetas ------- */
-  const totalHorasNum = horasServicio + horasCocina;
+  /* ------- totales para tarjetas (aplicando penalizaciones) ------- */
+  const horasServicioNet = Math.max(0, horasServicio - penaltyServicio);
+  const horasCocinaNet = Math.max(0, horasCocina - penaltyCocina);
+
+  const totalHorasNum = horasServicioNet + horasCocinaNet;
   const totalHoras = totalHorasNum.toFixed(1);
   const metaTotal = metaServicio + metaCocina || 1;
 
   const pctTotal = Math.min(100, (totalHorasNum / metaTotal) * 100 || 0);
   const pctServ = Math.min(
     100,
-    (horasServicio / (metaServicio || 1)) * 100 || 0
+    (horasServicioNet / (metaServicio || 1)) * 100 || 0
   );
   const pctCoc = Math.min(
     100,
-    (horasCocina / (metaCocina || 1)) * 100 || 0
+    (horasCocinaNet / (metaCocina || 1)) * 100 || 0
   );
+
+  // ¿está penalizado actualmente?
+  let estaPenalizado = false;
+  const now = new Date();
+  if (penaltyUntil && penaltyUntil instanceof Date) {
+    if (penaltyUntil.getTime() > now.getTime()) {
+      estaPenalizado = true;
+    }
+  }
+  // fallback: si no hay fecha guardada pero tiene 3+ advertencias
+  if (!estaPenalizado && advertencias >= 3) {
+    estaPenalizado = true;
+  }
 
   if (loading) {
     return (
@@ -330,7 +362,7 @@ export default function DashboardEstudiante() {
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold">
-                {horasServicio.toFixed(1)}h
+                {horasServicioNet.toFixed(1)}h
               </p>
               <p className="text-xs text-muted-foreground mb-2">
                 meta: {metaServicio}h
@@ -346,7 +378,7 @@ export default function DashboardEstudiante() {
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold">
-                {horasCocina.toFixed(1)}h
+                {horasCocinaNet.toFixed(1)}h
               </p>
               <p className="text-xs text-muted-foreground mb-2">
                 meta: {metaCocina}h
@@ -396,14 +428,14 @@ export default function DashboardEstudiante() {
 
               {advertencias === 2 && (
                 <p className="text-xs text-muted-foreground">
-                  Se descontarán <strong>5 horas</strong> de la categoría
-                  correspondiente.
+                  Segunda advertencia: se descontarán{" "}
+                  <strong>5 horas</strong> de la categoría correspondiente.
                 </p>
               )}
 
               {advertencias >= 3 && (
                 <p className="text-xs text-red-600">
-                  Penalizado por 1 semana.
+                  Penalizado por 1 semana para nuevos eventos.
                 </p>
               )}
             </CardContent>
@@ -591,7 +623,7 @@ export default function DashboardEstudiante() {
                           >
                             Registrado
                           </Button>
-                        ) : advertencias >= 3 ? (
+                        ) : estaPenalizado ? (
                           <Badge
                             variant="outline"
                             className="text-red-600 border-red-400"
