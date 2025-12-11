@@ -13,18 +13,15 @@ import { QrCode, Download, Copy } from "lucide-react";
 import toast from "react-hot-toast";
 
 export function QRCodeDialog({ eventId, eventTitle, children }) {
-  // 🔗 Base URL fija para pruebas en red local (PC: 192.168.3.8, puerto 5173)
-  const baseUrl = "http://192.168.3.8:5173";
 
-  // El link que se abrirá al escanear el código
-  const eventUrl = `${baseUrl}/scanner?eventId=${encodeURIComponent(
-    eventId
-  )}`;
+  // 👉 SIEMPRE usar dominio de producción
+  const baseUrl = "https://plataforma-horas-1005asr.web.app";
 
-  // El QR se genera a partir de ese enlace
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-    eventUrl
-  )}`;
+  // 👉 Link que se abrirá después de escanear
+  const eventUrl = `${baseUrl}/scanner?eventId=${encodeURIComponent(eventId)}`;
+
+  // 👉 Generar QR
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(eventUrl)}`;
 
   const handleCopyLink = async () => {
     try {
@@ -53,8 +50,7 @@ export function QRCodeDialog({ eventId, eventTitle, children }) {
             Código QR del Evento
           </DialogTitle>
           <DialogDescription>
-            Al escanear este código, se abrirá la página para registrar la
-            asistencia al evento.
+            Al escanear este código, se abrirá la página para registrar la asistencia al evento.
           </DialogDescription>
         </DialogHeader>
 
@@ -76,9 +72,7 @@ export function QRCodeDialog({ eventId, eventTitle, children }) {
 
                 <div className="text-sm text-muted-foreground space-y-1">
                   <p className="font-medium">ID del Evento:</p>
-                  <p className="font-mono text-xs bg-muted p-2 rounded break-all">
-                    {eventId}
-                  </p>
+                  <p className="font-mono text-xs bg-muted p-2 rounded break-all">{eventId}</p>
 
                   <p className="font-medium mt-2">Enlace del evento:</p>
                   <p className="font-mono text-xs bg-muted p-2 rounded break-all">
@@ -90,32 +84,21 @@ export function QRCodeDialog({ eventId, eventTitle, children }) {
           </Card>
 
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={handleCopyLink}
-              className="flex-1"
-            >
+            <Button variant="outline" onClick={handleCopyLink} className="flex-1">
               <Copy className="w-4 h-4 mr-2" />
               Copiar Enlace
             </Button>
-            <Button
-              variant="outline"
-              onClick={handleDownloadQR}
-              className="flex-1"
-            >
+            <Button variant="outline" onClick={handleDownloadQR} className="flex-1">
               <Download className="w-4 h-4 mr-2" />
               Descargar QR
             </Button>
           </div>
 
           <div className="text-xs text-muted-foreground text-center p-3 bg-muted/30 rounded-lg">
+            <p><strong>Instrucciones:</strong></p>
             <p>
-              <strong>Instrucciones:</strong>
-            </p>
-            <p>
-              Los estudiantes pueden escanear este código con la cámara del
-              celular. Se abrirá la página para registrar su asistencia al
-              evento (entrada o salida).
+              Los estudiantes pueden escanear este código con la cámara del celular.  
+              Se abrirá la página para registrar su asistencia al evento.
             </p>
           </div>
         </div>
