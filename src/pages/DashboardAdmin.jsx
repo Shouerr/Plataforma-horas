@@ -341,7 +341,7 @@ export default function DashboardAdmin() {
                 Crear Evento
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Nuevo Evento</DialogTitle>
                 <DialogDescription>
